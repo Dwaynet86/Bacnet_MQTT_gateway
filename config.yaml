@@ -1,0 +1,63 @@
+# BACnet Configuration
+bacnet:
+  device_id: 999999  # Our gateway's BACnet device ID
+  device_name: "BACnet-MQTT Gateway"
+  ip_address: "0.0.0.0"  # Listen on all interfaces
+  port: 47808  # Standard BACnet port
+  network_number: 0
+  max_apdu_length: 1476
+  segmentation_supported: "segmented-both"
+  vendor_id: 15
+
+# Discovery Settings
+discovery:
+  auto_discover: true
+  discovery_interval: 300  # seconds
+  who_is_timeout: 5  # seconds
+
+# Polling Configuration
+polling:
+  enabled: true
+  default_interval: 60  # seconds
+  properties:
+    - present-value
+    - status-flags
+    - reliability
+  
+# MQTT Configuration
+mqtt:
+  broker: "localhost"
+  port: 1883
+  username: ""
+  password: ""
+  client_id: "bacnet_gateway"
+  keepalive: 60
+  qos: 1
+  retain: true
+  
+  # Topic structure
+  topic_prefix: "bacnet"
+  # Format: {prefix}/{device_id}/{object_type}/{object_instance}/{property}
+  
+  # Connection settings
+  reconnect_delay: 5
+  max_reconnect_delay: 300
+
+# Device Management
+devices:
+  persistence_file: "devices.json"
+  auto_save: true
+  
+# API Configuration
+api:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "bacnet_gateway.log"
+  console: true
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
