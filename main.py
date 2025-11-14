@@ -284,8 +284,17 @@ class BACnetMQTTGateway:
         self.running = True
         self.logger.info("Starting BACnet-MQTT Gateway")
         
-        # Start MQTT service
-        await self.mqtt_service.start()
+        # Start MQTT service with error handling
+        try:
+            await self.mqtt_service.start()
+        except ConnectionRefusedError:
+            self.logger.error(
+                "MQTT broker connection failed. The gateway will continue without MQTT publishing. "
+                "Please check your MQTT broker configuration in config.yaml"
+            )
+        except Exception as e:
+            self.logger.error(f"Error starting MQTT service: {e}")
+            self.logger.warning("Continuing without MQTT publishing")
         
         # Start poller if enabled
         if self.poller:
@@ -294,9 +303,12 @@ class BACnetMQTTGateway:
         # Initial discovery if enabled
         if self.config['discovery']['auto_discover']:
             self.logger.info("Starting initial device discovery")
-            await self.discovery.discover_devices(
-                timeout=self.config['discovery'].get('who_is_timeout', 5)
-            )
+            try:
+                await self.discovery.discover_devices(
+                    timeout=self.config['discovery'].get('who_is_timeout', 5)
+                )
+            except Exception as e:
+                self.logger.error(f"Error during initial discovery: {e}")
         
         # Start API server if enabled
         if self.api_controller:
@@ -321,6 +333,8 @@ class BACnetMQTTGateway:
             asyncio.create_task(self._periodic_discovery())
         
         self.logger.info("Gateway started successfully")
+        self.logger.info("Access the API at http://localhost:8080")
+        self.logger.info("View API docs at http://localhost:8080/docs")
     
     async def _periodic_discovery(self):
         """Periodically discover new devices"""
