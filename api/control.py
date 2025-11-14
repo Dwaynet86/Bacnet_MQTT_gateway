@@ -2,9 +2,9 @@
 REST API for controlling the BACnet gateway
 """
 import logging
-from typing import Optional, List
+from typing import Optional, List, Any, Union
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 from models.device import DeviceRegistry, BACnetDevice
 from bacnet.discovery import BACnetDiscovery
 from bacnet.reader_writer import BACnetReaderWriter
@@ -28,11 +28,13 @@ class ReadPropertyRequest(BaseModel):
 
 
 class WritePropertyRequest(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
     device_id: int
     object_type: str
     object_instance: int
     property_id: str
-    value: any
+    value: Union[str, int, float, bool, None] = Field(..., description="Value to write")
     priority: Optional[int] = None
     array_index: Optional[int] = None
 
