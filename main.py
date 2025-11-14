@@ -200,6 +200,7 @@ class BACnetMQTTGateway:
         # Create device object with all required properties
         device_id = bacnet_config['device_id']
         device_address = bacnet_config['ip_address']
+        device_port = bacnet_config.get('port', 47808)
         
         # Create the device object
         device = DeviceObject(
@@ -213,31 +214,35 @@ class BACnetMQTTGateway:
             description="BACnet to MQTT Gateway"
         )
         
-        # Create address - if 0.0.0.0, use None to bind to all interfaces
+        # Create address with proper format for BACpypes3
+        # Format: "ip_address/netmask:port" or just "ip_address:port"
         if device_address == "0.0.0.0":
-            address = None
-        else:
-            address = Address(device_address)
+            # For binding to all interfaces, we need to determine the actual IP
+            import socket
+            try:
+                # Get the default network interface IP
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                device_address = s.getsockname()[0]
+                s.close()
+                self.logger.info(f"Using network interface: {device_address}")
+            except Exception:
+                # Fallback to localhost if we can't determine the interface
+                device_address = "127.0.0.1"
+                self.logger.warning("Could not determine network interface, using 127.0.0.1")
+        
+        address = Address(f"{device_address}:{device_port}")
         
         # Initialize the application using NormalApplication for IPv4
         try:
-            self.bacnet_app = await NormalApplication.new(device, address)
+            self.bacnet_app = NormalApplication(device, address)
             self.logger.info(
                 f"BACnet application initialized: "
-                f"Device {device_id} at {device_address}"
+                f"Device {device_id} at {address}"
             )
         except Exception as e:
             self.logger.error(f"Failed to initialize BACnet application: {e}")
-            # Try alternative initialization without async
-            try:
-                self.bacnet_app = NormalApplication(device, address)
-                self.logger.info(
-                    f"BACnet application initialized (sync): "
-                    f"Device {device_id} at {device_address}"
-                )
-            except Exception as e2:
-                self.logger.error(f"Failed alternative initialization: {e2}")
-                raise
+            raise
     
     async def _on_device_discovered(self, device):
         """Callback when a device is discovered"""
