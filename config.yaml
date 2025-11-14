@@ -1,14 +1,14 @@
 # BACnet Configuration
 bacnet:
-  device_id: 999999  # Our gateway's BACnet device ID
+  device_id: 249997  # Our gateway's BACnet device ID
   device_name: "BACnet-MQTT Gateway"
   ip_address: "0.0.0.0"  # Listen on all interfaces (auto-detect), or specify IP
   netmask: "255.255.255.0"  # Network mask for broadcast (only used if ip_address is not 0.0.0.0)
   port: 47808  # Standard BACnet port
-  network_number: 0
+  network_number: 2400
   max_apdu_length: 1476
   segmentation_supported: "segmented-both"
-  vendor_id: 15
+  vendor_id: 24
 
 # Discovery Settings
 discovery:
@@ -27,7 +27,7 @@ polling:
   
 # MQTT Configuration
 mqtt:
-  broker: "localhost"  # Change to your MQTT broker address (e.g., "test.mosquitto.org" for testing)
+  broker: "test.mosquitto.org"  # Change to your MQTT broker address (e.g., "test.mosquitto.org" for testing)
   port: 1883
   username: ""  # Leave empty if no authentication required
   password: ""
