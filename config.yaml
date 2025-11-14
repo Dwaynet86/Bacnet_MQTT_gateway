@@ -2,7 +2,8 @@
 bacnet:
   device_id: 999999  # Our gateway's BACnet device ID
   device_name: "BACnet-MQTT Gateway"
-  ip_address: "0.0.0.0"  # Listen on all interfaces
+  ip_address: "0.0.0.0"  # Listen on all interfaces (auto-detect), or specify IP
+  netmask: "255.255.255.0"  # Network mask for broadcast (only used if ip_address is not 0.0.0.0)
   port: 47808  # Standard BACnet port
   network_number: 0
   max_apdu_length: 1476
