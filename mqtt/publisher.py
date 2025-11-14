@@ -63,6 +63,12 @@ class MQTTPublisher:
             # Start network loop in background
             self.client.loop_start()
             
+        except ConnectionRefusedError:
+            logger.error(
+                f"Connection refused by MQTT broker at {self.broker}:{self.port}. "
+                "Please check if the MQTT broker is running and accessible."
+            )
+            raise
         except Exception as e:
             logger.error(f"Error connecting to MQTT broker: {e}")
             raise
