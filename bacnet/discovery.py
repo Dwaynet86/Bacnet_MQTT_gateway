@@ -50,45 +50,50 @@ class BACnetDiscovery:
         
         # Store discovered devices during this scan
         discovered = []
-        
-        # Create WHO-IS request
-        who_is = WhoIsRequest()
-        if low_limit is not None:
-            who_is.deviceInstanceRangeLowLimit = Unsigned(low_limit)
-        if high_limit is not None:
-            who_is.deviceInstanceRangeHighLimit = Unsigned(high_limit)
-        
-        # Send as broadcast
-        who_is.pduDestination = GlobalBroadcast()
-        
-        # Set up I-AM handler - BACpypes3 uses indication differently
         received_iams = []
         
-        # Store original indication method if it exists
-        original_indication = getattr(self.app, 'indication', None)
-        
-        async def iam_handler(apdu):
+        # Create a custom handler to capture I-AM responses
+        async def capture_iam(apdu):
             """Capture I-AM responses"""
             if isinstance(apdu, IAmRequest):
                 received_iams.append(apdu)
-            # Call original handler for other PDUs if it exists
-            if original_indication and callable(original_indication):
-                result = original_indication(apdu)
-                if asyncio.iscoroutine(result):
-                    await result
-                return result
+                logger.debug(f"Received I-AM from {apdu.pduSource}")
         
-        # Temporarily replace indication handler
-        self.app.indication = iam_handler
+        # Register the handler temporarily
+        original_do_IAmRequest = self.app.do_IAmRequest if hasattr(self.app, 'do_IAmRequest') else None
+        
+        async def custom_do_IAmRequest(apdu):
+            await capture_iam(apdu)
+            if original_do_IAmRequest:
+                await original_do_IAmRequest(apdu)
+        
+        self.app.do_IAmRequest = custom_do_IAmRequest
         
         try:
-            # Send WHO-IS
-            await self.app.request(who_is)
+            # Create and send WHO-IS request
+            logger.info("Sending WHO-IS broadcast")
+            
+            # Use the app's who_is method if available
+            if hasattr(self.app, 'who_is'):
+                await self.app.who_is(low_limit, high_limit)
+            else:
+                # Manual WHO-IS construction
+                who_is = WhoIsRequest()
+                if low_limit is not None:
+                    who_is.deviceInstanceRangeLowLimit = Unsigned(low_limit)
+                if high_limit is not None:
+                    who_is.deviceInstanceRangeHighLimit = Unsigned(high_limit)
+                who_is.pduDestination = GlobalBroadcast()
+                
+                # Send the request
+                await self.app.request(who_is)
             
             # Wait for responses
+            logger.debug(f"Waiting {timeout} seconds for I-AM responses")
             await asyncio.sleep(timeout)
             
             # Process received I-AMs
+            logger.info(f"Processing {len(received_iams)} I-AM responses")
             for iam in received_iams:
                 try:
                     device = await self._process_iam(iam)
@@ -97,19 +102,20 @@ class BACnetDiscovery:
                         if self.on_device_discovered:
                             await self.on_device_discovered(device)
                 except Exception as e:
-                    logger.error(f"Error processing I-AM: {e}")
+                    logger.error(f"Error processing I-AM: {e}", exc_info=True)
             
             logger.info(f"Discovery complete: {len(discovered)} devices found")
             return discovered
             
+        except Exception as e:
+            logger.error(f"Error during discovery: {e}", exc_info=True)
+            return discovered
         finally:
             # Restore original handler
-            if original_indication:
-                self.app.indication = original_indication
-            else:
-                # Remove the handler if there wasn't one originally
-                if hasattr(self.app, 'indication'):
-                    delattr(self.app, 'indication')
+            if original_do_IAmRequest:
+                self.app.do_IAmRequest = original_do_IAmRequest
+            elif hasattr(self.app, 'do_IAmRequest'):
+                delattr(self.app, 'do_IAmRequest')
     
     async def _process_iam(self, iam: IAmRequest) -> Optional[BACnetDevice]:
         """Process an I-AM response and create/update device"""
