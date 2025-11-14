@@ -215,23 +215,41 @@ class BACnetMQTTGateway:
         )
         
         # Create address with proper format for BACpypes3
-        # Format: "ip_address/netmask:port" or just "ip_address:port"
+        # Format: "ip_address/netmask:port" for proper broadcast support
         if device_address == "0.0.0.0":
             # For binding to all interfaces, we need to determine the actual IP
             import socket
+            import netifaces
             try:
-                # Get the default network interface IP
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                device_address = s.getsockname()[0]
-                s.close()
-                self.logger.info(f"Using network interface: {device_address}")
-            except Exception:
-                # Fallback to localhost if we can't determine the interface
-                device_address = "127.0.0.1"
-                self.logger.warning("Could not determine network interface, using 127.0.0.1")
+                # Try to get default gateway interface
+                gws = netifaces.gateways()
+                default_interface = gws['default'][netifaces.AF_INET][1]
+                addrs = netifaces.ifaddresses(default_interface)
+                ip_info = addrs[netifaces.AF_INET][0]
+                device_address = ip_info['addr']
+                netmask = ip_info.get('netmask', '255.255.255.0')
+                self.logger.info(f"Using network interface {default_interface}: {device_address}/{netmask}")
+            except Exception as e:
+                self.logger.warning(f"Could not determine network interface using netifaces: {e}")
+                # Fallback method
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    device_address = s.getsockname()[0]
+                    s.close()
+                    netmask = '255.255.255.0'  # Assume /24 network
+                    self.logger.info(f"Using network interface: {device_address}/{netmask}")
+                except Exception:
+                    device_address = "127.0.0.1"
+                    netmask = "255.0.0.0"
+                    self.logger.warning("Could not determine network interface, using 127.0.0.1")
+        else:
+            # Use the configured address with a default netmask
+            netmask = bacnet_config.get('netmask', '255.255.255.0')
         
-        address = Address(f"{device_address}:{device_port}")
+        # Create address with netmask for broadcast support
+        # Format: "ip/netmask:port"
+        address = Address(f"{device_address}/{netmask}:{device_port}")
         
         # Initialize the application using NormalApplication for IPv4
         try:
