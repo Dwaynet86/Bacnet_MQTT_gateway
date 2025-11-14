@@ -196,7 +196,11 @@ class BACnetDiscovery:
                     setattr(device, attr, str(value))
                     
             except Exception as e:
-                logger.debug(f"Could not read {prop_name} from device {device.device_id}: {e}")
+                error_msg = str(e)
+                # Only log if it's not a common "property not supported" error
+                if 'unknown-property' not in error_msg.lower():
+                    logger.debug(f"Could not read {prop_name} from device {device.device_id}: {e}")
+                # For unknown-property errors, silently skip
     
     async def read_device_object_list(self, device: BACnetDevice) -> List[ObjectIdentifier]:
         """Read the object list from a device"""
@@ -217,8 +221,66 @@ class BACnetDiscovery:
             return []
             
         except Exception as e:
-            logger.error(f"Error reading object list from device {device.device_id}: {e}")
+            error_msg = str(e)
+            if 'buffer-overflow' in error_msg.lower():
+                logger.warning(
+                    f"Buffer overflow reading object list from device {device.device_id}. "
+                    "Device may have too many objects or unsupported segmentation. "
+                    "Try reading object list by index."
+                )
+                # Try reading object list by array index as fallback
+                return await self._read_object_list_by_index(device)
+            elif 'unknown-property' in error_msg.lower():
+                logger.warning(f"Device {device.device_id} does not support object-list property")
+            else:
+                logger.error(f"Error reading object list from device {device.device_id}: {e}")
             return []
+    
+    async def _read_object_list_by_index(self, device: BACnetDevice) -> List[ObjectIdentifier]:
+        """Read object list by iterating through array indices"""
+        object_list = []
+        try:
+            device_obj_id = ObjectIdentifier(f"device,{device.device_id}")
+            address = Address(device.address)
+            
+            # First, try to get the array length (index 0)
+            try:
+                length = await self.app.read_property(
+                    address,
+                    device_obj_id,
+                    PropertyIdentifier('object-list'),
+                    array_index=0
+                )
+                max_objects = int(length) if length else 100
+            except:
+                max_objects = 100  # Assume reasonable default
+            
+            logger.info(f"Reading object list by index for device {device.device_id} (max: {max_objects})")
+            
+            # Read each object one at a time
+            for i in range(1, min(max_objects + 1, 500)):  # Cap at 500 to prevent infinite loops
+                try:
+                    obj_id = await self.app.read_property(
+                        address,
+                        device_obj_id,
+                        PropertyIdentifier('object-list'),
+                        array_index=i
+                    )
+                    if obj_id:
+                        object_list.append(obj_id)
+                except Exception as e:
+                    # Stop when we get an error (reached end of list)
+                    if 'invalid-array-index' in str(e).lower():
+                        break
+                    logger.debug(f"Error reading object-list[{i}]: {e}")
+                    break
+            
+            logger.info(f"Read {len(object_list)} objects by index from device {device.device_id}")
+            return object_list
+            
+        except Exception as e:
+            logger.error(f"Error reading object list by index: {e}")
+            return object_list
     
     async def discover_device_objects(self, device: BACnetDevice):
         """Discover all objects in a device"""
