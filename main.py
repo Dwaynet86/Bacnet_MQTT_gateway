@@ -9,9 +9,10 @@ from pathlib import Path
 import yaml
 from logging.handlers import RotatingFileHandler
 
+from bacpypes3.apdu import IAmRequest, WhoIsRequest
 from bacpypes3.app import Application
 from bacpypes3.local.device import DeviceObject
-from bacpypes3.pdu import Address
+from bacpypes3.pdu import Address, GlobalBroadcast
 
 from models.device import DeviceRegistry
 from bacnet.discovery import BACnetDiscovery
@@ -202,16 +203,12 @@ class BACnetMQTTGateway:
             vendorIdentifier=bacnet_config.get('vendor_id', 15)
         )
         
-        # Create application
-        self.bacnet_app = Application.from_object(
-            device,
-            Address(f"{bacnet_config['ip_address']}:{bacnet_config['port']}")
-        )
+        # Create application - BACpypes3 style
+        self.bacnet_app = Application(device)
         
         self.logger.info(
             f"BACnet application initialized: "
-            f"Device {bacnet_config['device_id']} at "
-            f"{bacnet_config['ip_address']}:{bacnet_config['port']}"
+            f"Device {bacnet_config['device_id']}"
         )
     
     async def _on_device_discovered(self, device):
