@@ -9,10 +9,14 @@ from pathlib import Path
 import yaml
 from logging.handlers import RotatingFileHandler
 
-from bacpypes3.apdu import IAmRequest, WhoIsRequest
+from bacpypes3.settings import settings
+from bacpypes3.pdu import Address
+from bacpypes3.primitivedata import ObjectIdentifier
+from bacpypes3.constructeddata import ArrayOf
+from bacpypes3.basetypes import ServicesSupported
 from bacpypes3.app import Application
 from bacpypes3.local.device import DeviceObject
-from bacpypes3.pdu import Address, GlobalBroadcast
+from bacpypes3.ipv4.app import NormalApplication
 
 from models.device import DeviceRegistry
 from bacnet.discovery import BACnetDiscovery
@@ -191,25 +195,35 @@ class BACnetMQTTGateway:
         """Initialize BACnet application"""
         bacnet_config = self.config['bacnet']
         
-        # Create device object
+        # Set up BACpypes3 settings
+        settings.address = Address(f"{bacnet_config['ip_address']}")
+        settings.objectIdentifier = bacnet_config['device_id']
+        settings.objectName = bacnet_config['device_name']
+        settings.maxApduLengthAccepted = bacnet_config.get('max_apdu_length', 1476)
+        settings.segmentationSupported = bacnet_config.get('segmentation_supported', 'segmentedBoth')
+        settings.vendorIdentifier = bacnet_config.get('vendor_id', 15)
+        
+        # Create device object with all required properties
         device = DeviceObject(
             objectIdentifier=('device', bacnet_config['device_id']),
             objectName=bacnet_config['device_name'],
             maxApduLengthAccepted=bacnet_config.get('max_apdu_length', 1476),
-            segmentationSupported=bacnet_config.get(
-                'segmentation_supported',
-                'segmented-both'
-            ),
-            vendorIdentifier=bacnet_config.get('vendor_id', 15)
+            segmentationSupported=bacnet_config.get('segmentation_supported', 'segmentedBoth'),
+            vendorIdentifier=bacnet_config.get('vendor_id', 15),
+            vendorName="BACnet-MQTT Gateway",
+            modelName="Gateway v1.0"
         )
         
-        # Create application - BACpypes3 style
-        self.bacnet_app = Application(device)
-        
-        self.logger.info(
-            f"BACnet application initialized: "
-            f"Device {bacnet_config['device_id']}"
-        )
+        # Initialize the application using NormalApplication for IPv4
+        try:
+            self.bacnet_app = NormalApplication(device, settings.address)
+            self.logger.info(
+                f"BACnet application initialized: "
+                f"Device {bacnet_config['device_id']} at {settings.address}"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to initialize BACnet application: {e}")
+            raise
     
     async def _on_device_discovered(self, device):
         """Callback when a device is discovered"""
