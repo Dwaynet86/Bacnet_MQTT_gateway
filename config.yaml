@@ -27,9 +27,9 @@ polling:
   
 # MQTT Configuration
 mqtt:
-  broker: "localhost"
+  broker: "localhost"  # Change to your MQTT broker address (e.g., "test.mosquitto.org" for testing)
   port: 1883
-  username: ""
+  username: ""  # Leave empty if no authentication required
   password: ""
   client_id: "bacnet_gateway"
   keepalive: 60
@@ -43,6 +43,11 @@ mqtt:
   # Connection settings
   reconnect_delay: 5
   max_reconnect_delay: 300
+  
+  # Note: If you don't have an MQTT broker running, you can:
+  # 1. Install Mosquitto: sudo apt-get install mosquitto mosquitto-clients
+  # 2. Or use a public test broker: broker: "test.mosquitto.org"
+  # The gateway will continue to work without MQTT if the connection fails
 
 # Device Management
 devices:
