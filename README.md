@@ -52,8 +52,15 @@ POST /write - Write property
 GET /devices/{id}/objects - List objects
 
 7. Main Application (main.py)
-
 Orchestrates all components
 Signal handling for graceful shutdown
 Periodic discovery scheduling
 Configuration management
+
+Installation
+git clone https://github.com/Dwaynet86/Bacnet_MQTT_gateway.git
+cd Bacnet_MQTT_gateway
+python3 -m venv bacnet_mqtt
+source banet_mqtt/bin/activate
+# Install dependencies
+pip install -r requirements.txt
