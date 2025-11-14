@@ -69,9 +69,22 @@ class BACnetReaderWriter:
             return value
             
         except Exception as e:
-            logger.error(
-                f"Error reading property from device {device_id}: {e}"
-            )
+            error_msg = str(e)
+            # Only log errors that aren't common "property not supported" issues
+            if 'unknown-property' in error_msg.lower():
+                logger.debug(
+                    f"Property {property_id} not supported on {object_type}:{object_instance} "
+                    f"of device {device_id}"
+                )
+            elif 'buffer-overflow' in error_msg.lower():
+                logger.warning(
+                    f"Buffer overflow reading {property_id} from {object_type}:{object_instance} "
+                    f"on device {device_id}. Value may be too large or segmentation not supported."
+                )
+            else:
+                logger.error(
+                    f"Error reading property from device {device_id}: {e}"
+                )
             return None
     
     async def write_property(
