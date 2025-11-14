@@ -9,14 +9,16 @@ from pathlib import Path
 import yaml
 from logging.handlers import RotatingFileHandler
 
-from bacpypes3.settings import settings
 from bacpypes3.pdu import Address
 from bacpypes3.primitivedata import ObjectIdentifier
-from bacpypes3.constructeddata import ArrayOf
-from bacpypes3.basetypes import ServicesSupported
 from bacpypes3.app import Application
 from bacpypes3.local.device import DeviceObject
-from bacpypes3.ipv4.app import NormalApplication
+
+try:
+    from bacpypes3.ipv4.app import NormalApplication
+except ImportError:
+    # Fallback if NormalApplication is not available
+    from bacpypes3.app import Application as NormalApplication
 
 from models.device import DeviceRegistry
 from bacnet.discovery import BACnetDiscovery
@@ -195,35 +197,47 @@ class BACnetMQTTGateway:
         """Initialize BACnet application"""
         bacnet_config = self.config['bacnet']
         
-        # Set up BACpypes3 settings
-        settings.address = Address(f"{bacnet_config['ip_address']}")
-        settings.objectIdentifier = bacnet_config['device_id']
-        settings.objectName = bacnet_config['device_name']
-        settings.maxApduLengthAccepted = bacnet_config.get('max_apdu_length', 1476)
-        settings.segmentationSupported = bacnet_config.get('segmentation_supported', 'segmentedBoth')
-        settings.vendorIdentifier = bacnet_config.get('vendor_id', 15)
-        
         # Create device object with all required properties
+        device_id = bacnet_config['device_id']
+        device_address = bacnet_config['ip_address']
+        
+        # Create the device object
         device = DeviceObject(
-            objectIdentifier=('device', bacnet_config['device_id']),
+            objectIdentifier=('device', device_id),
             objectName=bacnet_config['device_name'],
             maxApduLengthAccepted=bacnet_config.get('max_apdu_length', 1476),
             segmentationSupported=bacnet_config.get('segmentation_supported', 'segmentedBoth'),
             vendorIdentifier=bacnet_config.get('vendor_id', 15),
             vendorName="BACnet-MQTT Gateway",
-            modelName="Gateway v1.0"
+            modelName="Gateway v1.0",
+            description="BACnet to MQTT Gateway"
         )
+        
+        # Create address - if 0.0.0.0, use None to bind to all interfaces
+        if device_address == "0.0.0.0":
+            address = None
+        else:
+            address = Address(device_address)
         
         # Initialize the application using NormalApplication for IPv4
         try:
-            self.bacnet_app = NormalApplication(device, settings.address)
+            self.bacnet_app = await NormalApplication.new(device, address)
             self.logger.info(
                 f"BACnet application initialized: "
-                f"Device {bacnet_config['device_id']} at {settings.address}"
+                f"Device {device_id} at {device_address}"
             )
         except Exception as e:
             self.logger.error(f"Failed to initialize BACnet application: {e}")
-            raise
+            # Try alternative initialization without async
+            try:
+                self.bacnet_app = NormalApplication(device, address)
+                self.logger.info(
+                    f"BACnet application initialized (sync): "
+                    f"Device {device_id} at {device_address}"
+                )
+            except Exception as e2:
+                self.logger.error(f"Failed alternative initialization: {e2}")
+                raise
     
     async def _on_device_discovered(self, device):
         """Callback when a device is discovered"""
