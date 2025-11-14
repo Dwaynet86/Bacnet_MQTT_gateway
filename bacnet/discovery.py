@@ -5,7 +5,7 @@ import asyncio
 import logging
 from typing import Optional, List, Callable
 from bacpypes3.app import Application
-from bacpypes3.pdu import Address
+from bacpypes3.pdu import Address, GlobalBroadcast
 from bacpypes3.basetypes import PropertyIdentifier
 from bacpypes3.primitivedata import ObjectIdentifier, Unsigned
 from bacpypes3.apdu import IAmRequest, WhoIsRequest
@@ -59,18 +59,24 @@ class BACnetDiscovery:
             who_is.deviceInstanceRangeHighLimit = Unsigned(high_limit)
         
         # Send as broadcast
-        who_is.pduDestination = Address("*:47808")
+        who_is.pduDestination = GlobalBroadcast()
         
-        # Set up I-AM handler
-        original_handler = self.app.indication
+        # Set up I-AM handler - BACpypes3 uses indication differently
         received_iams = []
         
-        def iam_handler(apdu):
+        # Store original indication method if it exists
+        original_indication = getattr(self.app, 'indication', None)
+        
+        async def iam_handler(apdu):
             """Capture I-AM responses"""
             if isinstance(apdu, IAmRequest):
                 received_iams.append(apdu)
-            # Call original handler for other PDUs
-            return original_handler(apdu)
+            # Call original handler for other PDUs if it exists
+            if original_indication and callable(original_indication):
+                result = original_indication(apdu)
+                if asyncio.iscoroutine(result):
+                    await result
+                return result
         
         # Temporarily replace indication handler
         self.app.indication = iam_handler
@@ -98,7 +104,12 @@ class BACnetDiscovery:
             
         finally:
             # Restore original handler
-            self.app.indication = original_handler
+            if original_indication:
+                self.app.indication = original_indication
+            else:
+                # Remove the handler if there wasn't one originally
+                if hasattr(self.app, 'indication'):
+                    delattr(self.app, 'indication')
     
     async def _process_iam(self, iam: IAmRequest) -> Optional[BACnetDevice]:
         """Process an I-AM response and create/update device"""
