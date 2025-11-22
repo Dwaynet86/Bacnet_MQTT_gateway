@@ -56,11 +56,13 @@ class APIController:
         self,
         device_registry: DeviceRegistry,
         discovery: BACnetDiscovery,
-        reader_writer: BACnetReaderWriter
+        reader_writer: BACnetReaderWriter,
+        gateway=None  # Reference to main gateway for BBMD operations
     ):
         self.device_registry = device_registry
         self.discovery = discovery
         self.reader_writer = reader_writer
+        self.gateway = gateway
         self.app = FastAPI(title="BACnet-MQTT Gateway API")
         
         # Register routes
@@ -76,6 +78,36 @@ class APIController:
                 "name": "BACnet-MQTT Gateway",
                 "version": "1.0.0",
                 "status": "running"
+            }
+        
+        @self.app.get("/status")
+        async def get_status():
+            """Get gateway status and configuration"""
+            import socket
+            hostname = socket.gethostname()
+            
+            # Get BACnet app info
+            bacnet_info = {}
+            if hasattr(self.discovery.app, 'localDevice'):
+                device = self.discovery.app.localDevice
+                bacnet_info = {
+                    "device_id": device.objectIdentifier[1] if device.objectIdentifier else None,
+                    "device_name": device.objectName if hasattr(device, 'objectName') else None,
+                }
+            
+            # Get network address info
+            if hasattr(self.discovery.app, 'nse'):
+                nse = self.discovery.app.nse
+                if hasattr(nse, 'localAddress'):
+                    bacnet_info["local_address"] = str(nse.localAddress)
+                if hasattr(nse, 'broadcastAddress'):
+                    bacnet_info["broadcast_address"] = str(nse.broadcastAddress)
+            
+            return {
+                "hostname": hostname,
+                "bacnet": bacnet_info,
+                "devices_count": len(self.device_registry.get_all_devices()),
+                "enabled_devices_count": len(self.device_registry.get_enabled_devices())
             }
         
         @self.app.get("/devices", response_model=List[DeviceResponse])
@@ -110,15 +142,25 @@ class APIController:
         ):
             """Trigger device discovery"""
             try:
-                # Run discovery in background
-                background_tasks.add_task(
-                    self.discovery.discover_devices,
+                logger.info(
+                    f"Discovery requested - Range: {request.low_limit}-{request.high_limit}, "
+                    f"Timeout: {request.timeout}s"
+                )
+                
+                # Run discovery in foreground so we can return results
+                devices = await self.discovery.discover_devices(
                     request.low_limit,
                     request.high_limit,
                     request.timeout
                 )
-                return {"message": "Discovery started"}
+                
+                return {
+                    "message": f"Discovery complete: {len(devices)} devices found",
+                    "devices_found": len(devices),
+                    "device_ids": [d.device_id for d in devices]
+                }
             except Exception as e:
+                logger.error(f"Discovery error: {e}", exc_info=True)
                 raise HTTPException(status_code=500, detail=str(e))
         
         @self.app.post("/devices/{device_id}/discover-objects")
