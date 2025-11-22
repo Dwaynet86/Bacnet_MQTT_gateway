@@ -1,4 +1,15 @@
-"""
+async def _register_with_bbmd(self, bbmd_config: dict):
+        """Register as a Foreign Device with a BBMD"""
+        try:
+            bbmd_address = bbmd_config.get('address')
+            bbmd_port = bbmd_config.get('port', 47808)
+            ttl = bbmd_config.get('ttl', 30)
+            
+            if not bbmd_address:
+                self.logger.error("BBMD enabled but no address specified")
+                return
+            
+            self.logger.info(f"Registering as Foreign Device with BBMD at {bbmd_address}:{bbmd_port"""
 Main application entry point for BACnet-MQTT Gateway
 """
 import asyncio
