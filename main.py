@@ -257,65 +257,53 @@ class BACnetMQTTGateway:
         
         # Initialize the application 
         try:
+            # Always initialize with NormalApplication first
+            self.bacnet_app = NormalApplication(device, address)
+            
+            self.logger.info(
+                f"BACnet application initialized: "
+                f"Device {device_id} at {address}"
+            )
+            
+            # If BBMD is configured, register as foreign device
             if bbmd_config.get('enabled', False):
-                # Use foreign device registration during initialization
                 bbmd_address = bbmd_config.get('address')
                 bbmd_port = bbmd_config.get('port', 47808)
                 ttl = bbmd_config.get('ttl', 30)
                 
                 if bbmd_address:
                     self.logger.info(
-                        f"Initializing with Foreign Device registration: "
+                        f"Registering as Foreign Device: "
                         f"BBMD at {bbmd_address}:{bbmd_port}, TTL={ttl}s"
                     )
                     
-                    # Import the correct modules for foreign device support
-                    from bacpypes3.ipv4.service import BIPForeign
-                    from bacpypes3.pdu import IPv4Address
-                    
-                    # Create IPv4 address for BBMD
-                    bbmd_addr = IPv4Address(f"{bbmd_address}:{bbmd_port}")
-                    
-                    # Initialize application with foreign device support
-                    self.bacnet_app = NormalApplication(
-                        device, 
-                        address,
-                        aseID=None  # Will use default
-                    )
-                    
-                    # Get the BIP layer and configure as foreign device
-                    if hasattr(self.bacnet_app, 'bip'):
-                        bip = self.bacnet_app.bip
+                    try:
+                        # Import IPv4Address for BBMD
+                        from bacpypes3.pdu import IPv4Address
                         
-                        # Convert to foreign device if not already
-                        if not isinstance(bip, BIPForeign):
-                            # This might not be possible - try a different approach
-                            self.logger.warning("BIP layer is not BIPForeign, trying alternate method")
+                        # Create IPv4 address for BBMD
+                        bbmd_addr = IPv4Address(f"{bbmd_address}:{bbmd_port}")
                         
-                        # Register with BBMD
-                        if hasattr(bip, 'register'):
-                            bip.register(bbmd_addr, ttl)
-                            self.logger.info(f"Registered as Foreign Device with BBMD")
+                        # Register with BBMD using the bip layer
+                        if hasattr(self.bacnet_app, 'bip') and hasattr(self.bacnet_app.bip, 'register'):
+                            # Note: register() is synchronous in BACpypes3
+                            self.bacnet_app.bip.register(bbmd_addr, ttl)
+                            self.logger.info(f"✓ Registered as Foreign Device with BBMD (TTL: {ttl}s)")
                             
                             # Set up periodic re-registration
                             if ttl > 0:
                                 asyncio.create_task(self._periodic_bbmd_registration_simple(bbmd_addr, ttl))
                         else:
-                            self.logger.error("BIP layer does not have register method")
-                    else:
-                        self.logger.error("Application does not have bip attribute")
+                            self.logger.error("BIP layer does not support register() method")
+                            self.logger.info("Your BACpypes3 version may not support Foreign Device registration")
+                            
+                    except ImportError as e:
+                        self.logger.error(f"Cannot import IPv4Address: {e}")
+                        self.logger.info("Foreign Device registration not available in this BACpypes3 version")
+                    except Exception as e:
+                        self.logger.error(f"Error registering with BBMD: {e}", exc_info=True)
                 else:
-                    self.logger.error("BBMD enabled but no address specified")
-                    # Fall back to normal initialization
-                    self.bacnet_app = NormalApplication(device, address)
-            else:
-                # Normal initialization without BBMD
-                self.bacnet_app = NormalApplication(device, address)
-            
-            self.logger.info(
-                f"BACnet application initialized: "
-                f"Device {device_id} at {address}"
-            )
+                    self.logger.warning("BBMD enabled but no address specified")
             
         except Exception as e:
             self.logger.error(f"Failed to initialize BACnet application: {e}", exc_info=True)
