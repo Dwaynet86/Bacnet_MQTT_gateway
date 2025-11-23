@@ -188,8 +188,7 @@ class BACnetMQTTGateway:
             self.api_controller = APIController(
                 self.device_registry,
                 self.discovery,
-                self.reader_writer,
-                gateway=self  # Pass reference to gateway for BBMD operations
+                self.reader_writer
             )
         
         self.logger.info("Initialization complete")
@@ -252,86 +251,22 @@ class BACnetMQTTGateway:
         # Format: "ip/netmask:port"
         address = Address(f"{device_address}/{netmask}:{device_port}")
         
-        # Check if we need BBMD/Foreign Device support
-        bbmd_config = bacnet_config.get('bbmd', {})
-        
-        # Initialize the application 
+        # Initialize the application using NormalApplication for IPv4
         try:
-            # Always initialize with NormalApplication first
             self.bacnet_app = NormalApplication(device, address)
-            
             self.logger.info(
                 f"BACnet application initialized: "
                 f"Device {device_id} at {address}"
             )
             
-            # If BBMD is configured, register as foreign device
+            # Register as Foreign Device with BBMD if configured
+            bbmd_config = bacnet_config.get('bbmd', {})
             if bbmd_config.get('enabled', False):
-                bbmd_address = bbmd_config.get('address')
-                bbmd_port = bbmd_config.get('port', 47808)
-                ttl = bbmd_config.get('ttl', 30)
-                
-                if bbmd_address:
-                    self.logger.info(
-                        f"Registering as Foreign Device: "
-                        f"BBMD at {bbmd_address}:{bbmd_port}, TTL={ttl}s"
-                    )
-                    
-                    try:
-                        # Import IPv4Address for BBMD
-                        from bacpypes3.pdu import IPv4Address
-                        
-                        # Create IPv4 address for BBMD
-                        bbmd_addr = IPv4Address(f"{bbmd_address}:{bbmd_port}")
-                        
-                        # Register with BBMD using the bip layer
-                        if hasattr(self.bacnet_app, 'bip') and hasattr(self.bacnet_app.bip, 'register'):
-                            # Note: register() is synchronous in BACpypes3
-                            self.bacnet_app.bip.register(bbmd_addr, ttl)
-                            self.logger.info(f"✓ Registered as Foreign Device with BBMD (TTL: {ttl}s)")
-                            
-                            # Set up periodic re-registration
-                            if ttl > 0:
-                                asyncio.create_task(self._periodic_bbmd_registration_simple(bbmd_addr, ttl))
-                        else:
-                            self.logger.error("BIP layer does not support register() method")
-                            self.logger.info("Your BACpypes3 version may not support Foreign Device registration")
-                            
-                    except ImportError as e:
-                        self.logger.error(f"Cannot import IPv4Address: {e}")
-                        self.logger.info("Foreign Device registration not available in this BACpypes3 version")
-                    except Exception as e:
-                        self.logger.error(f"Error registering with BBMD: {e}", exc_info=True)
-                else:
-                    self.logger.warning("BBMD enabled but no address specified")
+                await self._register_with_bbmd(bbmd_config)
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize BACnet application: {e}", exc_info=True)
+            self.logger.error(f"Failed to initialize BACnet application: {e}")
             raise
-    
-    async def _periodic_bbmd_registration_simple(self, bbmd_addr, ttl: int):
-        """Simple periodic BBMD re-registration using bip.register()"""
-        try:
-            interval = max(ttl // 2, 5)
-            self.logger.info(f"Starting periodic BBMD registration (every {interval}s)")
-            
-            while self.running:
-                await asyncio.sleep(interval)
-                
-                if not self.running:
-                    break
-                
-                try:
-                    if hasattr(self.bacnet_app, 'bip') and hasattr(self.bacnet_app.bip, 'register'):
-                        self.bacnet_app.bip.register(bbmd_addr, ttl)
-                        self.logger.debug(f"Re-registered with BBMD (TTL: {ttl}s)")
-                except Exception as e:
-                    self.logger.error(f"Error re-registering with BBMD: {e}")
-                    
-        except asyncio.CancelledError:
-            self.logger.info("Stopping BBMD registration task")
-        except Exception as e:
-            self.logger.error(f"Error in BBMD registration loop: {e}")
     
     async def _register_with_bbmd(self, bbmd_config: dict):
         """Register as a Foreign Device with a BBMD"""
@@ -346,139 +281,49 @@ class BACnetMQTTGateway:
             
             self.logger.info(f"Registering as Foreign Device with BBMD at {bbmd_address}:{bbmd_port}")
             
-            # Create BBMD address  
+            # Create BBMD address
             bbmd_addr = Address(f"{bbmd_address}:{bbmd_port}")
             
-            # Method 1: Try bip.register if available
-            try:
-                if hasattr(self.bacnet_app, 'bip') and hasattr(self.bacnet_app.bip, 'register'):
-                    self.logger.debug("Trying method 1: bip.register()")
-                    await self.bacnet_app.bip.register(bbmd_addr, ttl)
-                    self.logger.info(f"✓ Successfully registered with BBMD (TTL: {ttl}s)")
-                    
-                    if ttl > 0:
-                        asyncio.create_task(self._periodic_bbmd_registration(bbmd_addr, ttl))
-                    return
-            except Exception as e:
-                self.logger.debug(f"Method 1 failed: {e}")
-            
-            # Method 2: Direct BVLL layer access
-            try:
-                from bacpypes3.ipv4 import bvll
+            # Check if the app has BBMD registration method
+            if hasattr(self.bacnet_app, 'register_foreign_device'):
+                await self.bacnet_app.register_foreign_device(bbmd_addr, ttl)
+                self.logger.info(f"Successfully registered with BBMD (TTL: {ttl}s)")
+            elif hasattr(self.bacnet_app, 'bip') and hasattr(self.bacnet_app.bip, 'register'):
+                # Try direct BIP layer registration
+                from bacpypes3.ipv4.bvll import RegisterForeignDevice
                 
-                self.logger.debug("Trying method 2: Direct BVLL access")
-                self.logger.debug(f"Available BVLL classes: {dir(bvll)}")
+                # Create registration message
+                register_msg = RegisterForeignDevice()
+                register_msg.bvlciTimeToLive = ttl
+                register_msg.pduDestination = bbmd_addr
                 
-                # Find RegisterForeignDevice class
-                if hasattr(bvll, 'RegisterForeignDevice'):
-                    RegFD = bvll.RegisterForeignDevice
-                    self.logger.debug(f"Found RegisterForeignDevice: {RegFD}")
-                    
-                    # Try to create instance with different signatures
-                    register_pdu = None
-                    try:
-                        # Try: RegisterForeignDevice(ttl)
-                        register_pdu = RegFD(ttl)
-                        self.logger.debug(f"Created with RegisterForeignDevice({ttl})")
-                    except:
-                        try:
-                            # Try: RegisterForeignDevice()
-                            register_pdu = RegFD()
-                            # Set TTL via different possible attribute names
-                            for attr in ['bvlciTimeToLive', 'ttl', 'timeToLive']:
-                                if hasattr(register_pdu, attr):
-                                    setattr(register_pdu, attr, ttl)
-                                    self.logger.debug(f"Set {attr} = {ttl}")
-                                    break
-                        except Exception as e:
-                            self.logger.debug(f"Could not create RegisterForeignDevice: {e}")
-                    
-                    if register_pdu:
-                        register_pdu.pduDestination = bbmd_addr
-                        
-                        # Find BVLL service point
-                        bvll_sap = None
-                        for attr in ['bip', 'bvll', 'annexj']:
-                            if hasattr(self.bacnet_app, attr):
-                                bvll_sap = getattr(self.bacnet_app, attr)
-                                self.logger.debug(f"Found BVLL SAP: {attr} = {type(bvll_sap)}")
-                                break
-                        
-                        if not bvll_sap and hasattr(self.bacnet_app, 'nse'):
-                            if hasattr(self.bacnet_app.nse, 'clientPeer'):
-                                bvll_sap = self.bacnet_app.nse.clientPeer
-                                self.logger.debug(f"Found BVLL SAP via nse.clientPeer: {type(bvll_sap)}")
-                        
-                        if bvll_sap:
-                            # Try different send methods
-                            for method in ['request', 'indication', 'confirmation']:
-                                if hasattr(bvll_sap, method):
-                                    try:
-                                        self.logger.debug(f"Trying bvll_sap.{method}()")
-                                        method_func = getattr(bvll_sap, method)
-                                        result = method_func(register_pdu)
-                                        if asyncio.iscoroutine(result):
-                                            await result
-                                        self.logger.info(f"✓ Registered via {method} (TTL: {ttl}s)")
-                                        
-                                        if ttl > 0:
-                                            asyncio.create_task(self._periodic_bbmd_registration(bbmd_addr, ttl))
-                                        return
-                                    except Exception as e:
-                                        self.logger.debug(f"bvll_sap.{method}() failed: {e}")
-                        
-            except Exception as e:
-                self.logger.debug(f"Method 2 failed: {e}", exc_info=True)
-            
-            # Method 3: Manual UDP packet construction
-            try:
-                import socket
-                import struct
+                await self.bacnet_app.request(register_msg)
+                self.logger.info(f"Sent Foreign Device registration to BBMD (TTL: {ttl}s)")
                 
-                self.logger.info("Trying method 3: Manual UDP registration")
-                
-                # BACnet/IP BVLL Register-Foreign-Device packet
-                # BVLL Type: 0x81 (BACnet/IP)
-                # Function: 0x05 (Register-Foreign-Device)
-                # Length: 0x0006 (6 bytes)
-                # TTL: 2 bytes
-                packet = struct.pack('!BBHHs', 
-                    0x81,  # BVLL Type
-                    0x05,  # Register-Foreign-Device function
-                    0x0006,  # Length (6 bytes total)
-                    ttl,  # Time-to-live
-                    0x00  # Padding
-                )
-                
-                # Actually, correct format is simpler:
-                packet = struct.pack('!BBHH',
-                    0x81,  # BVLL Type  
-                    0x05,  # Register-Foreign-Device
-                    0x0006,  # Length
-                    ttl  # TTL in seconds
-                )
-                
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.sendto(packet, (bbmd_address, bbmd_port))
-                sock.close()
-                
-                self.logger.info(f"✓ Sent manual BBMD registration (TTL: {ttl}s)")
-                
+                # Set up periodic re-registration if TTL > 0
                 if ttl > 0:
                     asyncio.create_task(self._periodic_bbmd_registration(bbmd_addr, ttl))
-                return
+            else:
+                self.logger.warning("BBMD registration not supported by current BACpypes3 version")
+                self.logger.info("Attempting manual BVLL registration...")
                 
-            except Exception as e:
-                self.logger.error(f"Method 3 failed: {e}", exc_info=True)
-            
-            self.logger.error("All BBMD registration methods failed")
-            self.logger.info(
-                "Troubleshooting steps:\n"
-                "  1. Verify BBMD is reachable: ping " + bbmd_address + "\n"
-                "  2. Check UDP port 47808 is not blocked\n"
-                "  3. Verify BBMD address is correct\n"
-                "  4. Check if BBMD allows Foreign Device registration"
-            )
+                # Manual BVLL Foreign Device Registration
+                from bacpypes3.ipv4.bvll import RegisterForeignDevice
+                
+                register_msg = RegisterForeignDevice()
+                register_msg.bvlciTimeToLive = ttl
+                register_msg.pduDestination = bbmd_addr
+                
+                # Send via the network service element
+                if hasattr(self.bacnet_app, 'nse'):
+                    await self.bacnet_app.nse.request(register_msg)
+                    self.logger.info(f"Sent Foreign Device registration via NSE (TTL: {ttl}s)")
+                    
+                    # Set up periodic re-registration
+                    if ttl > 0:
+                        asyncio.create_task(self._periodic_bbmd_registration(bbmd_addr, ttl))
+                else:
+                    self.logger.error("Cannot register with BBMD - no suitable method found")
                 
         except Exception as e:
             self.logger.error(f"Error registering with BBMD: {e}", exc_info=True)
@@ -498,29 +343,14 @@ class BACnetMQTTGateway:
                     break
                 
                 try:
-                    # Try bip.register first
-                    if hasattr(self.bacnet_app, 'bip') and hasattr(self.bacnet_app.bip, 'register'):
-                        await self.bacnet_app.bip.register(bbmd_addr, ttl)
-                        self.logger.debug(f"Re-registered with BBMD (TTL: {ttl}s)")
-                        continue
-                    
-                    # Fallback to BVLL layer
                     from bacpypes3.ipv4.bvll import RegisterForeignDevice
                     
-                    register_pdu = RegisterForeignDevice(ttl)
-                    register_pdu.pduDestination = bbmd_addr
+                    register_msg = RegisterForeignDevice()
+                    register_msg.bvlciTimeToLive = ttl
+                    register_msg.pduDestination = bbmd_addr
                     
-                    # Find BVLL SAP
-                    bvll_sap = None
-                    if hasattr(self.bacnet_app, 'bip'):
-                        bvll_sap = self.bacnet_app.bip
-                    elif hasattr(self.bacnet_app, 'bvll'):
-                        bvll_sap = self.bacnet_app.bvll
-                    elif hasattr(self.bacnet_app, 'nse') and hasattr(self.bacnet_app.nse, 'clientPeer'):
-                        bvll_sap = self.bacnet_app.nse.clientPeer
-                    
-                    if bvll_sap and hasattr(bvll_sap, 'request'):
-                        await bvll_sap.request(register_pdu)
+                    if hasattr(self.bacnet_app, 'nse'):
+                        await self.bacnet_app.nse.request(register_msg)
                         self.logger.debug(f"Re-registered with BBMD (TTL: {ttl}s)")
                     
                 except Exception as e:
@@ -630,17 +460,7 @@ class BACnetMQTTGateway:
         # Unregister from BBMD if registered
         bbmd_config = self.config.get('bacnet', {}).get('bbmd', {})
         if bbmd_config.get('enabled', False):
-            try:
-                if hasattr(self.bacnet_app, 'bip') and hasattr(self.bacnet_app.bip, 'register'):
-                    from bacpypes3.pdu import IPv4Address
-                    bbmd_address = bbmd_config.get('address')
-                    bbmd_port = bbmd_config.get('port', 47808)
-                    if bbmd_address:
-                        bbmd_addr = IPv4Address(f"{bbmd_address}:{bbmd_port}")
-                        self.bacnet_app.bip.register(bbmd_addr, 0)  # TTL=0 to unregister
-                        self.logger.info("Unregistered from BBMD")
-            except Exception as e:
-                self.logger.debug(f"Error unregistering from BBMD: {e}")
+            await self._unregister_from_bbmd(bbmd_config)
         
         # Stop poller
         if self.poller:
@@ -672,37 +492,16 @@ class BACnetMQTTGateway:
             
             bbmd_addr = Address(f"{bbmd_address}:{bbmd_port}")
             
-            try:
-                # Try bip.register with TTL=0
-                if hasattr(self.bacnet_app, 'bip') and hasattr(self.bacnet_app.bip, 'register'):
-                    await self.bacnet_app.bip.register(bbmd_addr, 0)
-                    self.logger.info("Unregistered from BBMD")
-                    return
-            except:
-                pass
+            from bacpypes3.ipv4.bvll import RegisterForeignDevice
             
-            # Fallback to BVLL
-            try:
-                from bacpypes3.ipv4.bvll import RegisterForeignDevice
-                
-                register_pdu = RegisterForeignDevice(0)  # TTL=0 to unregister
-                register_pdu.pduDestination = bbmd_addr
-                
-                # Find BVLL SAP
-                bvll_sap = None
-                if hasattr(self.bacnet_app, 'bip'):
-                    bvll_sap = self.bacnet_app.bip
-                elif hasattr(self.bacnet_app, 'bvll'):
-                    bvll_sap = self.bacnet_app.bvll
-                elif hasattr(self.bacnet_app, 'nse') and hasattr(self.bacnet_app.nse, 'clientPeer'):
-                    bvll_sap = self.bacnet_app.nse.clientPeer
-                
-                if bvll_sap and hasattr(bvll_sap, 'request'):
-                    await bvll_sap.request(register_pdu)
-                    self.logger.info("Unregistered from BBMD")
-                    
-            except Exception as e:
-                self.logger.debug(f"Error during BBMD unregistration: {e}")
+            # Send registration with TTL=0 to unregister
+            register_msg = RegisterForeignDevice()
+            register_msg.bvlciTimeToLive = 0
+            register_msg.pduDestination = bbmd_addr
+            
+            if hasattr(self.bacnet_app, 'nse'):
+                await self.bacnet_app.nse.request(register_msg)
+                self.logger.info("Unregistered from BBMD")
                 
         except Exception as e:
             self.logger.error(f"Error unregistering from BBMD: {e}")
