@@ -4,10 +4,13 @@ REST API for controlling the BACnet gateway
 import logging
 from typing import Optional, List, Any, Union
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ConfigDict
 from models.device import DeviceRegistry, BACnetDevice
 from bacnet.discovery import BACnetDiscovery
 from bacnet.reader_writer import BACnetReaderWriter
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -71,14 +74,22 @@ class APIController:
     def _register_routes(self):
         """Register API routes"""
         
-        @self.app.get("/")
+        @self.app.get("/", response_class=HTMLResponse)
         async def root():
-            """API root"""
-            return {
-                "name": "BACnet-MQTT Gateway",
-                "version": "1.0.0",
-                "status": "running"
-            }
+            """Serve the web interface"""
+            html_path = os.path.join(os.path.dirname(__file__), '..', 'index.html')
+            if os.path.exists(html_path):
+                with open(html_path, 'r') as f:
+                    return f.read()
+            else:
+                return """
+                <html>
+                    <body>
+                        <h1>BACnet-MQTT Gateway</h1>
+                        <p>Web interface not found. API docs available at <a href="/docs">/docs</a></p>
+                    </body>
+                </html>
+                """
         
         @self.app.get("/status")
         async def get_status():
@@ -103,12 +114,41 @@ class APIController:
                 if hasattr(nse, 'broadcastAddress'):
                     bacnet_info["broadcast_address"] = str(nse.broadcastAddress)
             
+            # Get BBMD status
+            bbmd_info = None
+            if self.gateway:
+                bbmd_config = self.gateway.config.get('bacnet', {}).get('bbmd', {})
+                if bbmd_config.get('enabled'):
+                    bbmd_info = {
+                        "enabled": True,
+                        "address": bbmd_config.get('address'),
+                        "port": bbmd_config.get('port', 47808),
+                        "ttl": bbmd_config.get('ttl', 30)
+                    }
+            
             return {
                 "hostname": hostname,
                 "bacnet": bacnet_info,
+                "bbmd": bbmd_info,
                 "devices_count": len(self.device_registry.get_all_devices()),
                 "enabled_devices_count": len(self.device_registry.get_enabled_devices())
             }
+        
+        @self.app.post("/bbmd/register")
+        async def register_bbmd():
+            """Manually trigger BBMD registration"""
+            if not self.gateway:
+                raise HTTPException(status_code=500, detail="Gateway reference not available")
+            
+            bbmd_config = self.gateway.config.get('bacnet', {}).get('bbmd', {})
+            if not bbmd_config.get('enabled'):
+                raise HTTPException(status_code=400, detail="BBMD not enabled in configuration")
+            
+            try:
+                await self.gateway._register_with_bbmd(bbmd_config)
+                return {"message": "BBMD registration triggered"}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
         
         @self.app.get("/devices", response_model=List[DeviceResponse])
         async def get_devices():
