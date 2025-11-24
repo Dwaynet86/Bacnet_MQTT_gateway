@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BACnet-MQTT Gateway</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+            background: #f5f7fa;
+            color: #2c3e50;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .header-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.9rem;
+            opacity: 0.95;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .container {
+            display: flex;
+            height: calc(100vh - 120px);
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        .btn-small {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+
+        .tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .tree-node {
+            margin-bottom: 0.25rem;
+        }
+
+        .tree-item {
+            padding: 0.6rem;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.15s;
+            user-select: none;
+        }
+
+        .tree-item:hover {
+            background: #f3f4f6;
+        }
+
+        .tree-item.selected {
+            background: #667eea;
+            color: white;
+        }
+
+        .tree-item.selected:hover {
+            background: #5568d3;
+        }
+
+        .tree-icon {
+            font-size: 0.9rem;
+            width: 16px;
+            display: inline-block;
+        }
+
+        .tree-children {
+            margin-left: 1.5rem;
+            margin-top: 0.25rem;
+        }
+
+        .main-content {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .content-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .content-subtitle {
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
+        .content-body {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-card {
+            background: #f9fafb;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .info-label {
+            font-size: 0.85rem;
+            color: #6b7280;
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: #1f2937;
+        }
+
+        .properties-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .properties-table th {
+            text-align: left;
+            padding: 0.75rem;
+            background: #f9fafb;
+            border-bottom: 2px solid #e5e7eb;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #6b7280;
+        }
+
+        .properties-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .properties-table tr:hover {
+            background: #f9fafb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .control-panel {
+            background: #f9fafb;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 1rem;
+            align-items: end;
+        }
+
+        .form-group {
+            flex: 1;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            color: #6b7280;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.6rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #6b7280;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #6b7280;
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .timestamp {
+            font-size: 0.8rem;
+            color: #9ca3af;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+
+        function App() {
+            const [devices, setDevices] = useState([]);
+            const [selectedItem, setSelectedItem] = useState(null);
+            const [expandedNodes, setExpandedNodes] = useState(new Set());
+            const [status, setStatus] = useState({ devices: 0, bbmd: false });
+            const [loading, setLoading] = useState(false);
+            const [lowLimit, setLowLimit] = useState('240001');
+            const [highLimit, setHighLimit] = useState('250000');
+            const [timeout, setTimeout_] = useState('10');
+
+            const API_BASE = window.location.origin;
+
+            // Load devices on mount
+            useEffect(() => {
+                loadDevices();
+                loadStatus();
+                const interval = setInterval(loadDevices, 5000); // Refresh every 5 seconds
+                return () => clearInterval(interval);
+            }, []);
+
+            const loadDevices = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/devices`);
+                    const data = await response.json();
+                    setDevices(data);
+                } catch (error) {
+                    console.error('Error loading devices:', error);
+                }
+            };
+
+            const loadStatus = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/status`);
+                    const data = await response.json();
+                    setStatus({
+                        devices: data.devices_count || 0,
+                        bbmd: data.bbmd?.enabled || false
+                    });
+                } catch (error) {
+                    console.error('Error loading status:', error);
+                }
+            };
+
+            const handleDiscover = async () => {
+                setLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE}/devices/discover`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            low_limit: parseInt(lowLimit),
+                            high_limit: parseInt(highLimit),
+                            timeout: parseInt(timeout_)
+                        })
+                    });
+                    const data = await response.json();
+                    alert(`Discovery complete: ${data.devices_found} devices found`);
+                    await loadDevices();
+                    await loadStatus();
+                } catch (error) {
+                    alert('Discovery failed: ' + error.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const toggleNode = (nodeId) => {
+                setExpandedNodes(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(nodeId)) {
+                        newSet.delete(nodeId);
+                    } else {
+                        newSet.add(nodeId);
+                    }
+                    return newSet;
+                });
+            };
+
+            const selectItem = (item) => {
+                setSelectedItem(item);
+            };
+
+            const loadDeviceDetails = async (deviceId) => {
+                try {
+                    const response = await fetch(`${API_BASE}/devices/${deviceId}`);
+                    const data = await response.json();
+                    return data;
+                } catch (error) {
+                    console.error('Error loading device details:', error);
+                    return null;
+                }
+            };
+
+            return (
+                <div>
+                    <div className="header">
+                        <div className="header-title">BACnet-MQTT Gateway</div>
+                        <div className="status-bar">
+                            <div className="status-item">
+                                <span className="status-dot"></span>
+                                <span>Gateway Online</span>
+                            </div>
+                            <div className="status-item">
+                                <span>📡 {status.devices} Devices</span>
+                            </div>
+                            {status.bbmd && (
+                                <div className="status-item">
+                                    <span>🌐 BBMD Connected</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="container">
+                        <div className="sidebar">
+                            <div className="sidebar-header">
+                                <div className="sidebar-title">Devices</div>
+                                <button className="btn btn-primary btn-small" onClick={handleDiscover} disabled={loading}>
+                                    {loading ? '⏳' : '🔍'} Discover
+                                </button>
+                            </div>
+                            
+                            <div className="control-panel" style={{margin: '1rem', marginTop: 0}}>
+                                <div className="control-group">
+                                    <div className="form-group">
+                                        <label className="form-label">Low Limit</label>
+                                        <input 
+                                            type="number" 
+                                            className="form-input" 
+                                            value={lowLimit}
+                                            onChange={(e) => setLowLimit(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">High Limit</label>
+                                        <input 
+                                            type="number" 
+                                            className="form-input" 
+                                            value={highLimit}
+                                            onChange={(e) => setHighLimit(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="form-group" style={{maxWidth: '100px'}}>
+                                        <label className="form-label">Timeout (s)</label>
+                                        <input 
+                                            type="number" 
+                                            className="form-input" 
+                                            value={timeout_}
+                                            onChange={(e) => setTimeout_(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <DeviceTree 
+                                devices={devices}
+                                selectedItem={selectedItem}
+                                expandedNodes={expandedNodes}
+                                onToggle={toggleNode}
+                                onSelect={selectItem}
+                                onLoadDetails={loadDeviceDetails}
+                            />
+                        </div>
+
+                        <DetailPanel selectedItem={selectedItem} />
+                    </div>
+                </div>
+            );
+        }
+
+        function DeviceTree({ devices, selectedItem, expandedNodes, onToggle, onSelect, onLoadDetails }) {
+            if (devices.length === 0) {
+                return (
+                    <div className="empty-state">
+                        <div className="empty-icon">📡</div>
+                        <div>No devices discovered yet</div>
+                        <div style={{fontSize: '0.85rem', marginTop: '0.5rem'}}>
+                            Click "Discover" to find BACnet devices
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="tree">
+                    {devices.map(device => (
+                        <DeviceNode
+                            key={device.device_id}
+                            device={device}
+                            selectedItem={selectedItem}
+                            expandedNodes={expandedNodes}
+                            onToggle={onToggle}
+                            onSelect={onSelect}
+                            onLoadDetails={onLoadDetails}
+                        />
+                    ))}
+                </div>
+            );
+        }
+
+        function DeviceNode({ device, selectedItem, expandedNodes, onToggle, onSelect, onLoadDetails }) {
+            const nodeId = `device-${device.device_id}`;
+            const isExpanded = expandedNodes.has(nodeId);
+            const isSelected = selectedItem?.type === 'device' && selectedItem?.id === device.device_id;
+            const [deviceDetails, setDeviceDetails] = useState(null);
+
+            useEffect(() => {
+                if (isExpanded && !deviceDetails) {
+                    onLoadDetails(device.device_id).then(setDeviceDetails);
+                }
+            }, [isExpanded]);
+
+            const handleClick = () => {
+                onToggle(nodeId);
+                onSelect({ type: 'device', id: device.device_id, data: device });
+            };
+
+            return (
+                <div className="tree-node">
+                    <div 
+                        className={`tree-item ${isSelected ? 'selected' : ''}`}
+                        onClick={handleClick}
+                    >
+                        <span className="tree-icon">{isExpanded ? '📂' : '📁'}</span>
+                        <span>{device.device_name || `Device ${device.device_id}`}</span>
+                        <span className="badge badge-info" style={{marginLeft: 'auto', fontSize: '0.75rem'}}>
+                            {device.object_count || 0}
+                        </span>
+                    </div>
+                    {isExpanded && deviceDetails && (
+                        <div className="tree-children">
+                            {Object.values(deviceDetails.objects || {}).map(obj => (
+                                <ObjectNode
+                                    key={`${obj.object_type}-${obj.object_instance}`}
+                                    object={obj}
+                                    deviceId={device.device_id}
+                                    selectedItem={selectedItem}
+                                    onSelect={onSelect}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function ObjectNode({ object, deviceId, selectedItem, onSelect }) {
+            const isSelected = selectedItem?.type === 'object' && 
+                              selectedItem?.deviceId === deviceId &&
+                              selectedItem?.data.object_instance === object.object_instance;
+
+            const handleClick = () => {
+                onSelect({ 
+                    type: 'object', 
+                    deviceId, 
+                    id: `${object.object_type}-${object.object_instance}`,
+                    data: object 
+                });
+            };
+
+            const icon = object.object_type.includes('input') ? '📥' :
+                        object.object_type.includes('output') ? '📤' :
+                        object.object_type.includes('value') ? '💾' : '📊';
+
+            return (
+                <div 
+                    className={`tree-item ${isSelected ? 'selected' : ''}`}
+                    onClick={handleClick}
+                    style={{paddingLeft: '1rem'}}
+                >
+                    <span className="tree-icon">{icon}</span>
+                    <span>{object.object_name || `${object.object_type} ${object.object_instance}`}</span>
+                </div>
+            );
+        }
+
+        function DetailPanel({ selectedItem }) {
+            if (!selectedItem) {
+                return (
+                    <div className="main-content">
+                        <div className="empty-state">
+                            <div className="empty-icon">👈</div>
+                            <div>Select a device or object to view details</div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (selectedItem.type === 'device') {
+                return <DeviceDetails device={selectedItem.data} />;
+            } else if (selectedItem.type === 'object') {
+                return <ObjectDetails object={selectedItem.data} deviceId={selectedItem.deviceId} />;
+            }
+
+            return null;
+        }
+
+        function DeviceDetails({ device }) {
+            return (
+                <div className="main-content">
+                    <div className="content-header">
+                        <div className="content-title">
+                            {device.device_name || `Device ${device.device_id}`}
+                        </div>
+                        <div className="content-subtitle">
+                            Device ID: {device.device_id} • {device.address}
+                        </div>
+                    </div>
+                    <div className="content-body">
+                        <div className="info-grid">
+                            <div className="info-card">
+                                <div className="info-label">Status</div>
+                                <div className="info-value">
+                                    <span className={`badge ${device.enabled ? 'badge-success' : 'badge-warning'}`}>
+                                        {device.enabled ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="info-card">
+                                <div className="info-label">Vendor</div>
+                                <div className="info-value">{device.vendor_name || 'Unknown'}</div>
+                            </div>
+                            <div className="info-card">
+                                <div className="info-label">Objects</div>
+                                <div className="info-value">{device.object_count || 0}</div>
+                            </div>
+                            <div className="info-card">
+                                <div className="info-label">Last Seen</div>
+                                <div className="info-value timestamp">
+                                    {new Date(device.last_seen).toLocaleString()}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{marginTop: '1.5rem'}}>
+                            <h3 style={{marginBottom: '1rem'}}>Device Information</h3>
+                            <table className="properties-table">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Device ID</strong></td>
+                                        <td>{device.device_id}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Address</strong></td>
+                                        <td>{device.address}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Vendor Name</strong></td>
+                                        <td>{device.vendor_name || 'N/A'}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Model Name</strong></td>
+                                        <td>{device.model_name || 'N/A'}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Firmware</strong></td>
+                                        <td>{device.firmware_revision || 'N/A'}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ObjectDetails({ object, deviceId }) {
+            return (
+                <div className="main-content">
+                    <div className="content-header">
+                        <div className="content-title">
+                            {object.object_name || `${object.object_type} ${object.object_instance}`}
+                        </div>
+                        <div className="content-subtitle">
+                            {object.object_type} • Instance {object.object_instance}
+                        </div>
+                    </div>
+                    <div className="content-body">
+                        <div className="info-grid">
+                            <div className="info-card">
+                                <div className="info-label">Object Type</div>
+                                <div className="info-value">{object.object_type}</div>
+                            </div>
+                            <div className="info-card">
+                                <div className="info-label">Instance</div>
+                                <div className="info-value">{object.object_instance}</div>
+                            </div>
+                            <div className="info-card">
+                                <div className="info-label">Properties</div>
+                                <div className="info-value">{Object.keys(object.properties || {}).length}</div>
+                            </div>
+                            {object.last_poll && (
+                                <div className="info-card">
+                                    <div className="info-label">Last Poll</div>
+                                    <div className="info-value timestamp">
+                                        {new Date(object.last_poll).toLocaleString()}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {Object.keys(object.properties || {}).length > 0 && (
+                            <div style={{marginTop: '1.5rem'}}>
+                                <h3 style={{marginBottom: '1rem'}}>Properties</h3>
+                                <table className="properties-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Property</th>
+                                            <th>Value</th>
+                                            <th>Unit</th>
+                                            <th>Timestamp</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(object.properties).map(([key, prop]) => (
+                                            <tr key={key}>
+                                                <td><strong>{prop.property_id}</strong></td>
+                                                <td>{String(prop.value)}</td>
+                                                <td>{prop.unit || '-'}</td>
+                                                <td className="timestamp">
+                                                    {new Date(prop.timestamp).toLocaleString()}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
