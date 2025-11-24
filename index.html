@@ -383,7 +383,7 @@
             const [loading, setLoading] = useState(false);
             const [lowLimit, setLowLimit] = useState('240001');
             const [highLimit, setHighLimit] = useState('250000');
-            const [timeout, setTimeout_] = useState('10');
+            const [discoverTimeout, setDiscoverTimeout] = useState('10');
 
             const API_BASE = window.location.origin;
 
@@ -427,7 +427,7 @@
                         body: JSON.stringify({
                             low_limit: parseInt(lowLimit),
                             high_limit: parseInt(highLimit),
-                            timeout: parseInt(timeout_)
+                            timeout: parseInt(discoverTimeout)
                         })
                     });
                     const data = await response.json();
@@ -522,8 +522,8 @@
                                         <input 
                                             type="number" 
                                             className="form-input" 
-                                            value={timeout_}
-                                            onChange={(e) => setTimeout_(e.target.value)}
+                                            value={discoverTimeout}
+                                            onChange={(e) => setDiscoverTimeout(e.target.value)}
                                         />
                                     </div>
                                 </div>
