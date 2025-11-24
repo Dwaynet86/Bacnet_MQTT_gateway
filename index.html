@@ -558,12 +558,61 @@
                 );
             }
 
+            // Sort devices by device_id numerically
+            const sortedDevices = [...devices].sort((a, b) => a.device_id - b.device_id);
+
+            // Group devices by network number (first 4 digits of device_id)
+            // e.g., 240001 -> network 2400, 240201 -> network 2402
+            const devicesByNetwork = {};
+            sortedDevices.forEach(device => {
+                const deviceIdStr = String(device.device_id);
+                // Extract network number (first 4 digits, or first 2-3 if shorter)
+                let networkNum;
+                if (deviceIdStr.length >= 6) {
+                    networkNum = deviceIdStr.substring(0, 4);
+                } else if (deviceIdStr.length >= 4) {
+                    networkNum = deviceIdStr.substring(0, 2);
+                } else {
+                    networkNum = '0';
+                }
+                
+                if (!devicesByNetwork[networkNum]) {
+                    devicesByNetwork[networkNum] = [];
+                }
+                devicesByNetwork[networkNum].push(device);
+            });
+
+            // Sort network numbers
+            const sortedNetworks = Object.keys(devicesByNetwork).sort((a, b) => parseInt(a) - parseInt(b));
+
+            // If only one network, don't show network grouping
+            if (sortedNetworks.length === 1) {
+                return (
+                    <div className="tree">
+                        {sortedDevices.map(device => (
+                            <DeviceNode
+                                key={device.device_id}
+                                device={device}
+                                selectedItem={selectedItem}
+                                expandedNodes={expandedNodes}
+                                onToggle={onToggle}
+                                onSelect={onSelect}
+                                onLoadDetails={onLoadDetails}
+                                showFullId={false}
+                            />
+                        ))}
+                    </div>
+                );
+            }
+
+            // Multiple networks - show grouped view
             return (
                 <div className="tree">
-                    {devices.map(device => (
-                        <DeviceNode
-                            key={device.device_id}
-                            device={device}
+                    {sortedNetworks.map(networkNum => (
+                        <NetworkNode
+                            key={networkNum}
+                            networkNum={networkNum}
+                            devices={devicesByNetwork[networkNum]}
                             selectedItem={selectedItem}
                             expandedNodes={expandedNodes}
                             onToggle={onToggle}
@@ -575,7 +624,47 @@
             );
         }
 
-        function DeviceNode({ device, selectedItem, expandedNodes, onToggle, onSelect, onLoadDetails }) {
+        function NetworkNode({ networkNum, devices, selectedItem, expandedNodes, onToggle, onSelect, onLoadDetails }) {
+            const nodeId = `network-${networkNum}`;
+            const isExpanded = expandedNodes.has(nodeId);
+
+            const handleClick = () => {
+                onToggle(nodeId);
+            };
+
+            return (
+                <div className="tree-node">
+                    <div 
+                        className="tree-item"
+                        onClick={handleClick}
+                    >
+                        <span className="tree-icon">{isExpanded ? '📂' : '📁'}</span>
+                        <span>Network {networkNum}</span>
+                        <span className="badge badge-info" style={{marginLeft: 'auto', fontSize: '0.75rem'}}>
+                            {devices.length}
+                        </span>
+                    </div>
+                    {isExpanded && (
+                        <div className="tree-children">
+                            {devices.map(device => (
+                                <DeviceNode
+                                    key={device.device_id}
+                                    device={device}
+                                    selectedItem={selectedItem}
+                                    expandedNodes={expandedNodes}
+                                    onToggle={onToggle}
+                                    onSelect={onSelect}
+                                    onLoadDetails={onLoadDetails}
+                                    showFullId={false}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function DeviceNode({ device, selectedItem, expandedNodes, onToggle, onSelect, onLoadDetails, showFullId = true }) {
             const nodeId = `device-${device.device_id}`;
             const isExpanded = expandedNodes.has(nodeId);
             const isSelected = selectedItem?.type === 'device' && selectedItem?.id === device.device_id;
@@ -592,17 +681,24 @@
                 onSelect({ type: 'device', id: device.device_id, data: device });
             };
 
+            // Display just the device ID number
+            const displayName = device.device_name && device.device_name !== `Device ${device.device_id}` 
+                ? `${device.device_id} - ${device.device_name}`
+                : String(device.device_id);
+
             return (
                 <div className="tree-node">
                     <div 
                         className={`tree-item ${isSelected ? 'selected' : ''}`}
                         onClick={handleClick}
                     >
-                        <span className="tree-icon">{isExpanded ? '📂' : '📁'}</span>
-                        <span>{device.device_name || `Device ${device.device_id}`}</span>
-                        <span className="badge badge-info" style={{marginLeft: 'auto', fontSize: '0.75rem'}}>
-                            {device.object_count || 0}
-                        </span>
+                        <span className="tree-icon">{isExpanded ? '▼' : '▶'}</span>
+                        <span>🖥️ {displayName}</span>
+                        {device.object_count > 0 && (
+                            <span className="badge badge-success" style={{marginLeft: 'auto', fontSize: '0.75rem'}}>
+                                {device.object_count}
+                            </span>
+                        )}
                     </div>
                     {isExpanded && deviceDetails && (
                         <div className="tree-children">
