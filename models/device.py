@@ -60,6 +60,7 @@ class BACnetDevice:
     protocol_revision: int = 0
     max_apdu_length: int = 1476
     segmentation_supported: str = "segmented-both"
+    network_number: Optional[int] = None  # Add network number field
     objects: Dict[str, BACnetObject] = field(default_factory=dict)
     discovered_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     last_seen: str = field(default_factory=lambda: datetime.utcnow().isoformat())
