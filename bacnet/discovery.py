@@ -202,8 +202,7 @@ class BACnetDiscovery:
             'firmware-revision',
             'application-software-version',
             'protocol-version',
-            'protocol-revision',
-            'network-number'  # Add network number
+            'protocol-revision'
         ]
         
         device_obj_id = ObjectIdentifier(f"device,{device.device_id}")
@@ -225,13 +224,12 @@ class BACnetDiscovery:
                     'firmware-revision': 'firmware_revision',
                     'application-software-version': 'application_software_version',
                     'protocol-version': 'protocol_version',
-                    'protocol-revision': 'protocol_revision',
-                    'network-number': 'network_number'
+                    'protocol-revision': 'protocol_revision'
                 }
                 
                 attr = attr_map.get(prop_name)
                 if attr and value is not None:
-                    setattr(device, attr, str(value) if attr != 'network_number' else int(value))
+                    setattr(device, attr, str(value))
                     
             except Exception as e:
                 error_msg = str(e)
@@ -239,6 +237,35 @@ class BACnetDiscovery:
                 if 'unknown-property' not in error_msg.lower():
                     logger.debug(f"Could not read {prop_name} from device {device.device_id}: {e}")
                 # For unknown-property errors, silently skip
+        
+        # Try to read network number separately (many devices don't support this)
+        try:
+            network_value = await self.app.read_property(
+                address,
+                device_obj_id,
+                PropertyIdentifier('network-number')
+            )
+            if network_value is not None:
+                device.network_number = int(network_value)
+                logger.debug(f"Device {device.device_id} network number: {device.network_number}")
+        except Exception as e:
+            # Network number not available - try to extract from address
+            try:
+                # If device address contains network info, extract it
+                # BACnet address format can be "network:mac" or just "mac"
+                addr_str = str(device.address)
+                if ':' in addr_str:
+                    # Format might be "2400:10.0.0.50" indicating network 2400
+                    parts = addr_str.split(':')
+                    if parts[0].isdigit():
+                        device.network_number = int(parts[0])
+                        logger.debug(f"Extracted network {device.network_number} from address")
+            except:
+                pass
+            
+            # If still no network number, leave it as None
+            if device.network_number is None:
+                logger.debug(f"Device {device.device_id} has no network number")
     
     async def read_device_object_list(self, device: BACnetDevice) -> List[ObjectIdentifier]:
         """Read the object list from a device"""
