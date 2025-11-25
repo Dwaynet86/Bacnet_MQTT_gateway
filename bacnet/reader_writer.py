@@ -290,6 +290,9 @@ class BACnetPoller:
                 await self.task
             except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                # Ignore errors during shutdown
+                logger.debug(f"Error during poller shutdown: {e}")
         logger.info("BACnet poller stopped")
     
     async def _poll_loop(self):
@@ -299,6 +302,9 @@ class BACnetPoller:
                 devices = self.device_registry.get_enabled_devices()
                 
                 for device in devices:
+                    if not self.running:  # Check if we should stop
+                        break
+                        
                     if not device.enabled:
                         continue
                     
@@ -308,15 +314,19 @@ class BACnetPoller:
                             self.properties
                         )
                     except Exception as e:
-                        logger.error(f"Error polling device {device.device_id}: {e}")
+                        if self.running:  # Only log if not shutting down
+                            logger.error(f"Error polling device {device.device_id}: {e}")
                 
                 # Save registry after polling
-                self.device_registry.save()
+                if self.running:
+                    self.device_registry.save()
                 
                 await asyncio.sleep(self.default_interval)
                 
             except asyncio.CancelledError:
+                logger.debug("Polling loop cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in poll loop: {e}")
-                await asyncio.sleep(5)
+                if self.running:  # Only log if not shutting down
+                    logger.error(f"Error in poll loop: {e}")
+                    await asyncio.sleep(5)
