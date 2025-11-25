@@ -238,17 +238,8 @@ class BACnetDiscovery:
                     logger.debug(f"Could not read {prop_name} from device {device.device_id}: {e}")
                 # For unknown-property errors, silently skip
         
-        # Try to read network number separately (many devices don't support this)
-        try:
-            network_value = await self.app.read_property(
-                address,
-                device_obj_id,
-                PropertyIdentifier('network-number')
-            )
-            if network_value is not None:
-                device.network_number = int(network_value)
-                logger.debug(f"Device {device.device_id} network number: {device.network_number}")
-        except Exception as e:
+        
+        
             # Network number not available - try to extract from address
             try:
                 # If device address contains network info, extract it
