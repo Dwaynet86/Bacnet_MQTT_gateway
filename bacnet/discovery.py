@@ -46,7 +46,7 @@ class BACnetDiscovery:
         Returns:
             List of discovered devices
         """
-        logger.info(f"Starting device discovery (timeout: {timeout}s)")
+        logger.info(f"Starting device discovery (timeout: {timeout}s, range: {low_limit}-{high_limit})")
         
         # Store discovered devices during this scan
         discovered = []
@@ -55,45 +55,78 @@ class BACnetDiscovery:
         # Create a custom handler to capture I-AM responses
         async def capture_iam(apdu):
             """Capture I-AM responses"""
+            logger.debug(f"Received APDU type: {type(apdu).__name__}")
             if isinstance(apdu, IAmRequest):
                 received_iams.append(apdu)
-                logger.debug(f"Received I-AM from {apdu.pduSource}")
+                logger.info(f"Received I-AM from device {apdu.iAmDeviceIdentifier[1]} at {apdu.pduSource}")
+            else:
+                logger.debug(f"Received non-IAM APDU: {apdu}")
         
         # Register the handler temporarily
-        original_do_IAmRequest = self.app.do_IAmRequest if hasattr(self.app, 'do_IAmRequest') else None
+        original_do_IAmRequest = getattr(self.app, 'do_IAmRequest', None)
         
         async def custom_do_IAmRequest(apdu):
             await capture_iam(apdu)
-            if original_do_IAmRequest:
-                await original_do_IAmRequest(apdu)
+            if original_do_IAmRequest and callable(original_do_IAmRequest):
+                try:
+                    result = original_do_IAmRequest(apdu)
+                    if asyncio.iscoroutine(result):
+                        await result
+                except Exception as e:
+                    logger.debug(f"Error in original do_IAmRequest: {e}")
         
         self.app.do_IAmRequest = custom_do_IAmRequest
         
         try:
             # Create and send WHO-IS request
-            logger.info("Sending WHO-IS broadcast")
+            logger.info("Sending WHO-IS broadcast...")
             
-            # Use the app's who_is method if available
-            if hasattr(self.app, 'who_is'):
-                await self.app.who_is(low_limit, high_limit)
-            else:
-                # Manual WHO-IS construction
-                who_is = WhoIsRequest()
-                if low_limit is not None:
-                    who_is.deviceInstanceRangeLowLimit = Unsigned(low_limit)
-                if high_limit is not None:
-                    who_is.deviceInstanceRangeHighLimit = Unsigned(high_limit)
-                who_is.pduDestination = GlobalBroadcast()
-                
-                # Send the request
-                await self.app.request(who_is)
+            # Try using the built-in who_is method first
+            try:
+                if hasattr(self.app, 'who_is'):
+                    logger.debug(f"Using app.who_is method with range {low_limit}-{high_limit}")
+                    await self.app.who_is(low_limit, high_limit)
+                else:
+                    # Manual WHO-IS construction
+                    logger.debug("Constructing manual WHO-IS request")
+                    who_is = WhoIsRequest()
+                    
+                    if low_limit is not None:
+                        who_is.deviceInstanceRangeLowLimit = Unsigned(low_limit)
+                        logger.debug(f"Set low limit: {low_limit}")
+                    if high_limit is not None:
+                        who_is.deviceInstanceRangeHighLimit = Unsigned(high_limit)
+                        logger.debug(f"Set high limit: {high_limit}")
+                    
+                    # Set destination to broadcast
+                    who_is.pduDestination = GlobalBroadcast()
+                    logger.debug(f"Set destination to GlobalBroadcast: {who_is.pduDestination}")
+                    
+                    # Send the request
+                    logger.info("Sending WHO-IS request...")
+                    await self.app.request(who_is)
+                    logger.info("WHO-IS request sent successfully")
+                    
+            except Exception as e:
+                logger.error(f"Error sending WHO-IS: {e}", exc_info=True)
+                return discovered
             
             # Wait for responses
-            logger.debug(f"Waiting {timeout} seconds for I-AM responses")
+            logger.info(f"Waiting {timeout} seconds for I-AM responses...")
             await asyncio.sleep(timeout)
             
             # Process received I-AMs
             logger.info(f"Processing {len(received_iams)} I-AM responses")
+            if len(received_iams) == 0:
+                logger.warning(
+                    "No I-AM responses received. Possible issues:\n"
+                    "  1. No BACnet devices on the network\n"
+                    "  2. Wrong network/subnet configuration\n"
+                    "  3. Firewall blocking UDP port 47808\n"
+                    "  4. Devices on different BACnet network number\n"
+                    "  5. Network address/mask incorrect in config"
+                )
+            
             for iam in received_iams:
                 try:
                     device = await self._process_iam(iam)
@@ -115,7 +148,10 @@ class BACnetDiscovery:
             if original_do_IAmRequest:
                 self.app.do_IAmRequest = original_do_IAmRequest
             elif hasattr(self.app, 'do_IAmRequest'):
-                delattr(self.app, 'do_IAmRequest')
+                try:
+                    delattr(self.app, 'do_IAmRequest')
+                except:
+                    pass
     
     async def _process_iam(self, iam: IAmRequest) -> Optional[BACnetDevice]:
         """Process an I-AM response and create/update device"""
@@ -166,7 +202,8 @@ class BACnetDiscovery:
             'firmware-revision',
             'application-software-version',
             'protocol-version',
-            'protocol-revision'
+            'protocol-revision',
+            'network-number'  # Add network number
         ]
         
         device_obj_id = ObjectIdentifier(f"device,{device.device_id}")
@@ -188,12 +225,13 @@ class BACnetDiscovery:
                     'firmware-revision': 'firmware_revision',
                     'application-software-version': 'application_software_version',
                     'protocol-version': 'protocol_version',
-                    'protocol-revision': 'protocol_revision'
+                    'protocol-revision': 'protocol_revision',
+                    'network-number': 'network_number'
                 }
                 
                 attr = attr_map.get(prop_name)
                 if attr and value is not None:
-                    setattr(device, attr, str(value))
+                    setattr(device, attr, str(value) if attr != 'network_number' else int(value))
                     
             except Exception as e:
                 error_msg = str(e)
