@@ -195,21 +195,22 @@ class BACnetDiscovery:
     
     async def _read_device_properties(self, device: BACnetDevice):
         """Read basic properties from a device"""
-        properties_to_read = [
+        # Standard properties that most devices support
+        basic_properties = [
             'object-name',
             'vendor-name',
             'model-name',
             'firmware-revision',
             'application-software-version',
             'protocol-version',
-            'protocol-revision',
-            'network-number'  # Add network number
+            'protocol-revision'
         ]
         
         device_obj_id = ObjectIdentifier(f"device,{device.device_id}")
         address = Address(device.address)
         
-        for prop_name in properties_to_read:
+        # Read basic properties
+        for prop_name in basic_properties:
             try:
                 value = await self.app.read_property(
                     address,
@@ -218,27 +219,53 @@ class BACnetDiscovery:
                 )
                 
                 # Map property to device attribute
-                attr_map = {
-                    'object-name': 'device_name',
-                    'vendor-name': 'vendor_name',
-                    'model-name': 'model_name',
-                    'firmware-revision': 'firmware_revision',
-                    'application-software-version': 'application_software_version',
-                    'protocol-version': 'protocol_version',
-                    'protocol-revision': 'protocol_revision',
-                    'network-number': 'network_number'
-                }
-                
-                attr = attr_map.get(prop_name)
-                if attr and value is not None:
-                    setattr(device, attr, str(value) if attr != 'network_number' else int(value))
+                if prop_name == 'object-name' and value is not None:
+                    device.device_name = str(value)
+                elif prop_name == 'vendor-name' and value is not None:
+                    device.vendor_name = str(value)
+                elif prop_name == 'model-name' and value is not None:
+                    device.model_name = str(value)
+                elif prop_name == 'firmware-revision' and value is not None:
+                    device.firmware_revision = str(value)
+                elif prop_name == 'application-software-version' and value is not None:
+                    device.application_software_version = str(value)
+                elif prop_name == 'protocol-version' and value is not None:
+                    device.protocol_version = int(value) if isinstance(value, (int, str)) else 1
+                elif prop_name == 'protocol-revision' and value is not None:
+                    device.protocol_revision = int(value) if isinstance(value, (int, str)) else 0
                     
             except Exception as e:
-                error_msg = str(e)
+                error_msg = str(e).lower()
                 # Only log if it's not a common "property not supported" error
-                if 'unknown-property' not in error_msg.lower():
+                if 'unknown-property' not in error_msg:
                     logger.debug(f"Could not read {prop_name} from device {device.device_id}: {e}")
-                # For unknown-property errors, silently skip
+        
+        # Try to read network number separately (optional property)
+        try:
+            network_value = await self.app.read_property(
+                address,
+                device_obj_id,
+                PropertyIdentifier('network-number')
+            )
+            if network_value is not None:
+                device.network_number = int(network_value)
+                logger.debug(f"Device {device.device_id} network number: {device.network_number}")
+        except Exception:
+            # Network number not available - try to extract from address
+            try:
+                # If device address contains network info, extract it
+                addr_str = str(device.address)
+                if ':' in addr_str:
+                    parts = addr_str.split(':')
+                    if parts[0].isdigit():
+                        device.network_number = int(parts[0])
+                        logger.debug(f"Device {device.device_id}: extracted network {device.network_number} from address")
+            except Exception:
+                pass
+            
+            # If still no network number, it remains None
+            if device.network_number is None:
+                logger.debug(f"Device {device.device_id} has no network number")
     
     async def read_device_object_list(self, device: BACnetDevice) -> List[ObjectIdentifier]:
         """Read the object list from a device"""
