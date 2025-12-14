@@ -241,31 +241,35 @@ class BACnetDiscovery:
                     logger.debug(f"Could not read {prop_name} from device {device.device_id}: {e}")
         
         # Try to read network number separately (optional property)
+        # Many devices don't support this property, so we catch all exceptions
+        network_value = None
         try:
             network_value = await self.app.read_property(
                 address,
                 device_obj_id,
                 PropertyIdentifier('network-number')
             )
-            if network_value is not None:
+        except:
+            # Any error reading network number is fine - it's optional
+            pass
+        
+        if network_value is not None:
+            try:
                 device.network_number = int(network_value)
                 logger.debug(f"Device {device.device_id} network number: {device.network_number}")
-        except Exception:
-            # Network number not available - try to extract from address
+            except:
+                pass
+        else:
+            # Try to extract from address as fallback
             try:
-                # If device address contains network info, extract it
                 addr_str = str(device.address)
                 if ':' in addr_str:
                     parts = addr_str.split(':')
-                    if parts[0].isdigit():
+                    if len(parts) > 0 and parts[0].isdigit():
                         device.network_number = int(parts[0])
                         logger.debug(f"Device {device.device_id}: extracted network {device.network_number} from address")
-            except Exception:
+            except:
                 pass
-            
-            # If still no network number, it remains None
-            if device.network_number is None:
-                logger.debug(f"Device {device.device_id} has no network number")
     
     async def read_device_object_list(self, device: BACnetDevice) -> List[ObjectIdentifier]:
         """Read the object list from a device"""
