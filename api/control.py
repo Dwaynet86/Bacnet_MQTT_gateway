@@ -77,19 +77,33 @@ class APIController:
         @self.app.get("/", response_class=HTMLResponse)
         async def root():
             """Serve the web interface"""
-            html_path = os.path.join(os.path.dirname(__file__), '..', 'index.html')
-            if os.path.exists(html_path):
-                with open(html_path, 'r') as f:
-                    return f.read()
-            else:
-                return """
-                <html>
-                    <body>
-                        <h1>BACnet-MQTT Gateway</h1>
-                        <p>Web interface not found. API docs available at <a href="/docs">/docs</a></p>
-                    </body>
-                </html>
-                """
+            # Try multiple possible locations for index.html
+            possible_paths = [
+                'index.html',
+                os.path.join(os.path.dirname(__file__), '..', 'index.html'),
+                os.path.join(os.getcwd(), 'index.html'),
+            ]
+            
+            for html_path in possible_paths:
+                if os.path.exists(html_path):
+                    logger.info(f"Serving index.html from: {html_path}")
+                    with open(html_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+            
+            # File not found
+            logger.error("index.html not found in any expected location")
+            return """
+            <html>
+                <body>
+                    <h1>BACnet-MQTT Gateway</h1>
+                    <p>Web interface file (index.html) not found.</p>
+                    <p>Expected locations checked:</p>
+                    <ul>""" + ''.join(f"<li>{p}</li>" for p in possible_paths) + """
+                    </ul>
+                    <p>API docs available at <a href="/docs">/docs</a></p>
+                </body>
+            </html>
+            """
         
         @self.app.get("/status")
         async def get_status():
