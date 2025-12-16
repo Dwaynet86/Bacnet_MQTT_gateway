@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ConfigDict
 from models.device import DeviceRegistry, BACnetDevice
+from models.mqtt_mapping import MQTTMappingRegistry, MQTTMapping
 from bacnet.discovery import BACnetDiscovery
 from bacnet.reader_writer import BACnetReaderWriter
 import os
