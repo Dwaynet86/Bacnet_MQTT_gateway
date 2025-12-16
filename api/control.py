@@ -43,6 +43,15 @@ class WritePropertyRequest(BaseModel):
     array_index: Optional[int] = None
 
 
+class MQTTMappingRequest(BaseModel):
+    device_id: int
+    object_type: str
+    object_instance: int
+    mqtt_topic: str
+    custom_topic: Optional[str] = None
+    enabled: bool = True
+
+
 class DeviceResponse(BaseModel):
     device_id: int
     address: str
