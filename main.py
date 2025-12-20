@@ -165,7 +165,8 @@ class BACnetMQTTGateway:
             password=mqtt_config.get('password', ''),
             topic_prefix=mqtt_config['topic_prefix'],
             qos=mqtt_config['qos'],
-            retain=mqtt_config['retain']
+            retain=mqtt_config['retain'],
+            mqtt_mapping_registry=getattr(self, 'mqtt_mapping_registry', None)
         )
         
         # Initialize MQTT publishing service
