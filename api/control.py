@@ -77,13 +77,13 @@ class APIController:
         self.reader_writer = reader_writer
         self.gateway = gateway
         self.app = FastAPI(title="BACnet-MQTT Gateway API")
-        
+        self.app.mount("/static", StaticFiles(directory="static"), name="static")
         # Register routes
         self._register_routes()
     
     def _register_routes(self):
         """Register API routes"""
-        app.mount("/static", StaticFiles(directory="static"), name="static")
+        
         @self.app.get("/", response_class=HTMLResponse)
         async def root():
             """Serve the web interface"""
