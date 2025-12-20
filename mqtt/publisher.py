@@ -24,7 +24,8 @@ class MQTTPublisher:
         topic_prefix: str = "bacnet",
         qos: int = 1,
         retain: bool = True,
-        keepalive: int = 60
+        keepalive: int = 60,
+        mqtt_mapping_registry = None
     ):
         self.broker = broker
         self.port = port
@@ -35,6 +36,7 @@ class MQTTPublisher:
         self.qos = qos
         self.retain = retain
         self.keepalive = keepalive
+        self.mqtt_mapping_registry = mqtt_mapping_registry
         
         self.client: Optional[mqtt.Client] = None
         self.connected = False
@@ -173,13 +175,26 @@ class MQTTPublisher:
                 logger.debug(f"Property {property_id} not found in object")
                 return False
             
-            # Build topic and payload
-            topic = self._build_topic(
-                device.device_id,
-                obj.object_type,
-                obj.object_instance,
-                property_id
-            )
+            # Check if there's a custom mapping for this object
+            topic = None
+            if self.mqtt_mapping_registry:
+                mapping = self.mqtt_mapping_registry.get_mapping(
+                    device.device_id,
+                    obj.object_type,
+                    obj.object_instance
+                )
+                if mapping and mapping.enabled:
+                    topic = mapping.mqtt_topic
+                    logger.debug(f"Using mapped topic: {topic}")
+            
+            # Fall back to default topic if no mapping
+            if not topic:
+                topic = self._build_topic(
+                    device.device_id,
+                    obj.object_type,
+                    obj.object_instance,
+                    property_id
+                )
             
             payload = self._build_payload(
                 prop.value,
