@@ -131,6 +131,10 @@ class BACnetMQTTGateway:
         """Initialize all components"""
         self.logger.info("Initializing components")
         
+        # Initialize MQTT mapping registry first
+        from models.mqtt_mapping import MQTTMappingRegistry
+        self.mqtt_mapping_registry = MQTTMappingRegistry()
+        
         # Initialize BACnet application
         await self._initialize_bacnet()
         
