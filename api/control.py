@@ -83,7 +83,7 @@ class APIController:
     
     def _register_routes(self):
         """Register API routes"""
-        
+        app.mount("/static", StaticFiles(directory="static"), name="static")
         @self.app.get("/", response_class=HTMLResponse)
         async def root():
             """Serve the web interface"""
