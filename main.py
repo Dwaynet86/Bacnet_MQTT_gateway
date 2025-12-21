@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 import yaml
 from logging.handlers import RotatingFileHandler
-
+from models.mqtt_mapping import MQTTMappingRegistry
 from bacpypes3.argparse import SimpleArgumentParser
 from bacpypes3.app import Application
 
