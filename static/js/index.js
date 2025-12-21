@@ -457,7 +457,7 @@ function DetailPanel({ selectedItem }) {
     if (selectedItem.type === 'device') {
         return <DeviceDetails device={selectedItem.data} />;
     } else if (selectedItem.type === 'object') {
-        return <tails object={selectedItem.data} deviceId={selectedItem.deviceId} />;
+        return <ObjectDetails object={selectedItem.data} deviceId={selectedItem.deviceId} />;
     }
 
     return null;
@@ -532,7 +532,7 @@ function DeviceDetails({ device }) {
     );
 }
 
-function tails({ object, deviceId }) {
+function ObjectDetails({ object, deviceId }) {
     const [customTopic, setCustomTopic] = useState('');
     const [isMappingMode, setIsMappingMode] = useState(false);
     const [savedMapping, setSavedMapping] = useState(null);
