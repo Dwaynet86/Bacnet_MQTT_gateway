@@ -70,11 +70,13 @@ class APIController:
         device_registry: DeviceRegistry,
         discovery: BACnetDiscovery,
         reader_writer: BACnetReaderWriter,
+        mqtt_mapping_registry: MQTTMappingRegistry,
         gateway=None  # Reference to main gateway for BBMD operations
     ):
         self.device_registry = device_registry
         self.discovery = discovery
         self.reader_writer = reader_writer
+        self.mqtt_mapping_registry = mqtt_mapping_registry
         self.gateway = gateway
         self.app = FastAPI(title="BACnet-MQTT Gateway API")
         self.app.mount("/static", StaticFiles(directory="static"), name="static")
