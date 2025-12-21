@@ -537,9 +537,16 @@ function ObjectDetails({ object, deviceId }) {
     const [isMappingMode, setIsMappingMode] = useState(false);
     const [savedMapping, setSavedMapping] = useState(null);
 
+    // Add a key to track which object we're showing
+    const objectKey = `${deviceId}-${object.object_type}-${object.object_instance}`;
+
     useEffect(() => {
+        // Reset state when object changes
+        setIsMappingMode(false);
+        setCustomTopic('');
+        setSavedMapping(null);
         loadMapping();
-    }, [deviceId, object.object_instance]);
+    }, [objectKey]); // Changed dependency to objectKey
 
     const loadMapping = async () => {
         try {
@@ -551,8 +558,12 @@ function ObjectDetails({ object, deviceId }) {
             }
         } catch (error) {
             // No mapping exists yet
+            setSavedMapping(null);
+            setCustomTopic('');
         }
     };
+
+    // ... rest of the function stays the same;
 
     const defaultTopic = `bacnet/${deviceId}/${object.object_type.replace(/-/g, '_')}/${object.object_instance}/present-value`;
 
