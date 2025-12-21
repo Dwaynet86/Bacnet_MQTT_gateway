@@ -32,8 +32,6 @@ polling:
   default_interval: 60  # seconds
   properties:
     - present-value
-    - status-flags
-    - reliability
   
 # MQTT Configuration
 mqtt:
