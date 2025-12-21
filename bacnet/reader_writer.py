@@ -178,18 +178,18 @@ class BACnetReaderWriter:
         device: BACnetDevice,
         obj: BACnetObject,
         properties: List[str]
-        ) -> dict:
-    """
-    Poll an object for specified properties and update the device model
-    
-    Args:
-        device: BACnet device
-        obj: BACnet object to poll
-        properties: List of property identifiers to read
+    ) -> dict:
+        """
+        Poll an object for specified properties and update the device model
         
-    Returns:
-        Dictionary of property values
-    """
+        Args:
+            device: BACnet device
+            obj: BACnet object to poll
+            properties: List of property identifiers to read
+            
+        Returns:
+            Dictionary of property values
+        """
     results = {}
     
     # Track which properties this object doesn't support to avoid repeated attempts
