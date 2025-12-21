@@ -81,6 +81,7 @@ class APIController:
         # Register routes
         self._register_routes()
     
+
     def _register_routes(self):
         """Register API routes"""
         
@@ -365,3 +366,45 @@ class APIController:
                 raise HTTPException(status_code=404, detail="Object not found")
             
             return obj.to_dict()
+        # MQTT Mapping Endpoints
+        @self.app.post("/mqtt/mapping")
+        async def create_mqtt_mapping(request: MQTTMappingRequest):
+            """Create or update an MQTT topic mapping"""
+            try:
+                logger.info(f"Creating MQTT mapping: {request.device_id}/{request.object_type}/{request.object_instance}")
+                mapping = MQTTMapping(
+                    device_id=request.device_id,
+                    object_type=request.object_type,
+                    object_instance=request.object_instance,
+                    mqtt_topic=request.mqtt_topic,
+                    custom_topic=request.custom_topic,
+                    enabled=request.enabled
+                )
+                self.mqtt_mapping_registry.add_mapping(mapping)
+                logger.info(f"MQTT mapping saved successfully")
+                return mapping.to_dict()
+            except Exception as e:
+                logger.error(f"Error creating MQTT mapping: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/mqtt/mapping/{device_id}/{object_type}/{object_instance}")
+        async def get_mqtt_mapping(device_id: int, object_type: str, object_instance: int):
+            """Get a specific MQTT mapping"""
+            logger.debug(f"Getting MQTT mapping: {device_id}/{object_type}/{object_instance}")
+            mapping = self.mqtt_mapping_registry.get_mapping(device_id, object_type, object_instance)
+            if not mapping:
+                raise HTTPException(status_code=404, detail="Mapping not found")
+            return mapping.to_dict()
+        
+        @self.app.delete("/mqtt/mapping/{device_id}/{object_type}/{object_instance}")
+        async def delete_mqtt_mapping(device_id: int, object_type: str, object_instance: int):
+            """Delete an MQTT mapping"""
+            logger.info(f"Deleting MQTT mapping: {device_id}/{object_type}/{object_instance}")
+            if self.mqtt_mapping_registry.remove_mapping(device_id, object_type, object_instance):
+                return {"message": "Mapping deleted"}
+            raise HTTPException(status_code=404, detail="Mapping not found")
+        
+        @self.app.get("/mqtt/mappings")
+        async def get_all_mappings():
+            """Get all MQTT mappings"""
+            return [m.to_dict() for m in self.mqtt_mapping_registry.get_all_mappings()]
