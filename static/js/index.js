@@ -537,17 +537,26 @@ function ObjectDetails({ object, deviceId }) {
     const [isMappingMode, setIsMappingMode] = useState(false);
     const [savedMapping, setSavedMapping] = useState(null);
     const [isReading, setIsReading] = useState(false);
+    const [currentValue, setCurrentValue] = useState(null);
+    const [lastUpdate, setLastUpdate] = useState(null);
 
-    // Add a key to track which object we're showing
     const objectKey = `${deviceId}-${object.object_type}-${object.object_instance}`;
 
     useEffect(() => {
-        // Reset state when object changes
         setIsMappingMode(false);
         setCustomTopic('');
         setSavedMapping(null);
+        // Set initial value from object if it exists
+        const presentValue = object.properties?.['present-value'];
+        if (presentValue) {
+            setCurrentValue(presentValue.value);
+            setLastUpdate(presentValue.timestamp);
+        } else {
+            setCurrentValue(null);
+            setLastUpdate(null);
+        }
         loadMapping();
-    }, [objectKey]); // Changed dependency to objectKey
+    }, [objectKey]);
 
     const loadMapping = async () => {
         try {
@@ -558,7 +567,6 @@ function ObjectDetails({ object, deviceId }) {
                 setCustomTopic(data.custom_topic || '');
             }
         } catch (error) {
-            // No mapping exists yet
             setSavedMapping(null);
             setCustomTopic('');
         }
@@ -569,7 +577,7 @@ function ObjectDetails({ object, deviceId }) {
         try {
             const response = await fetch(`${window.location.origin}/read`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': application/json' },
                 body: JSON.stringify({
                     device_id: deviceId,
                     object_type: object.object_type,
@@ -580,9 +588,8 @@ function ObjectDetails({ object, deviceId }) {
             
             if (response.ok) {
                 const data = await response.json();
-                alert(`Current Value: ${data.value}`);
-                // Trigger a refresh of the device list
-                window.location.reload();
+                setCurrentValue(data.value);
+                setLastUpdate(new Date().toISOString());
             } else {
                 const error = await response.json();
                 alert('Failed to read value: ' + (error.detail || 'Unknown error'));
@@ -594,9 +601,8 @@ function ObjectDetails({ object, deviceId }) {
         }
     };
 
-    const defaultTopic = `bacnet/${deviceId}/${object.object_type.replace(/-/g, '_')}/${object.object_instance}/present-value`;
-
     const handleSaveMapping = async () => {
+        const defaultTopic = `bacnet/${deviceId}/${object.object_type.replace(/-/g, '_')}/${object.object_instance}/present-value`;
         const topic = customTopic || defaultTopic;
         try {
             const response = await fetch(`${window.location.origin}/mqtt/mapping`, {
@@ -644,9 +650,11 @@ function ObjectDetails({ object, deviceId }) {
         }
     };
 
-    // Get present-value if it exists
+    const defaultTopic = `bacnet/${deviceId}/${object.object_type.replace(/-/g, '_')}/${object.object_instance}/present-value`;
     const presentValue = object.properties?.['present-value'];
-    const hasValue = presentValue !== undefined;
+    const displayValue = currentValue !== null ? currentValue : presentValue?.value;
+    const displayTimestamp = lastUpdate || presentValue?.timestamp;
+    const hasValue = displayValue !== undefined;
 
     return (
         <div className="main-content">
@@ -659,7 +667,6 @@ function ObjectDetails({ object, deviceId }) {
                 </div>
             </div>
             <div className="content-body">
-                {/* Add Read Now button at the top */}
                 <div style={{marginBottom: '1rem'}}>
                     <button 
                         className="btn btn-primary" 
@@ -670,7 +677,6 @@ function ObjectDetails({ object, deviceId }) {
                     </button>
                 </div>
 
-                {/* Current Value Display */}
                 {hasValue && (
                     <div style={{
                         background: 'linear-gradient(135deg, #10b98115 0%, #05966915 100%)',
@@ -684,16 +690,18 @@ function ObjectDetails({ object, deviceId }) {
                             CURRENT VALUE
                         </div>
                         <div style={{fontSize: '3rem', fontWeight: 700, color: '#047857', marginBottom: '0.5rem'}}>
-                            {String(presentValue.value)}
-                            {presentValue.unit && (
+                            {String(displayValue)}
+                            {presentValue?.unit && (
                                 <span style={{fontSize: '1.5rem', marginLeft: '0.5rem', color: '#059669'}}>
                                     {presentValue.unit}
                                 </span>
                             )}
                         </div>
-                        <div className="timestamp">
-                            Last updated: {new Date(presentValue.timestamp).toLocaleString()}
-                        </div>
+                        {displayTimestamp && (
+                            <div className="timestamp">
+                                Last updated: {new Date(displayTimestamp).toLocaleString()}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -720,7 +728,6 @@ function ObjectDetails({ object, deviceId }) {
                     )}
                 </div>
 
-                {/* MQTT Mapping Section */}
                 <div className="mqtt-mapping-section">
                     <div className="mqtt-mapping-header">
                         <h3 style={{margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
@@ -849,5 +856,4 @@ function ObjectDetails({ object, deviceId }) {
         </div>
     );
 }
-
 ReactDOM.render(<App />, document.getElementById('root'));
