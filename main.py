@@ -186,6 +186,7 @@ class BACnetMQTTGateway:
                 self.device_registry,
                 self.discovery,
                 self.reader_writer,
+                self.mqtt_mapping_registry,
                 gateway=self
             )
         
