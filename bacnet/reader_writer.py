@@ -249,7 +249,7 @@ class BACnetReaderWriter:
                         f"{obj.object_type}:{obj.object_instance}: {e}"
                     )
         
-    return results
+        return results
     
     async def poll_device_objects(
         self,
