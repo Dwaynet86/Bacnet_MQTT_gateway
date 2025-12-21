@@ -457,7 +457,7 @@ function DetailPanel({ selectedItem }) {
     if (selectedItem.type === 'device') {
         return <DeviceDetails device={selectedItem.data} />;
     } else if (selectedItem.type === 'object') {
-        return <ObjectDetails object={selectedItem.data} deviceId={selectedItem.deviceId} />;
+        return <tails object={selectedItem.data} deviceId={selectedItem.deviceId} />;
     }
 
     return null;
@@ -532,10 +532,11 @@ function DeviceDetails({ device }) {
     );
 }
 
-function ObjectDetails({ object, deviceId }) {
+function tails({ object, deviceId }) {
     const [customTopic, setCustomTopic] = useState('');
     const [isMappingMode, setIsMappingMode] = useState(false);
     const [savedMapping, setSavedMapping] = useState(null);
+    const [isReading, setIsReading] = useState(false);
 
     // Add a key to track which object we're showing
     const objectKey = `${deviceId}-${object.object_type}-${object.object_instance}`;
@@ -563,7 +564,35 @@ function ObjectDetails({ object, deviceId }) {
         }
     };
 
-    // ... rest of the function stays the same;
+    const handleReadValue = async () => {
+        setIsReading(true);
+        try {
+            const response = await fetch(`${window.location.origin}/read`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    device_id: deviceId,
+                    object_type: object.object_type,
+                    object_instance: object.object_instance,
+                    property_id: 'present-value'
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                alert(`Current Value: ${data.value}`);
+                // Trigger a refresh of the device list
+                window.location.reload();
+            } else {
+                const error = await response.json();
+                alert('Failed to read value: ' + (error.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            alert('Error reading value: ' + error.message);
+        } finally {
+            setIsReading(false);
+        }
+    };
 
     const defaultTopic = `bacnet/${deviceId}/${object.object_type.replace(/-/g, '_')}/${object.object_instance}/present-value`;
 
@@ -630,10 +659,21 @@ function ObjectDetails({ object, deviceId }) {
                 </div>
             </div>
             <div className="content-body">
+                {/* Add Read Now button at the top */}
+                <div style={{marginBottom: '1rem'}}>
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={handleReadValue}
+                        disabled={isReading}
+                    >
+                        {isReading ? '⏳ Reading...' : '🔄 Read Current Value'}
+                    </button>
+                </div>
+
                 {/* Current Value Display */}
                 {hasValue && (
                     <div style={{
-                        background: 'linear-gradient(135deg, #10b98115 0%, #059669(15 100%)',
+                        background: 'linear-gradient(135deg, #10b98115 0%, #05966915 100%)',
                         padding: '2rem',
                         borderRadius: '12px',
                         border: '2px solid #10b981',
