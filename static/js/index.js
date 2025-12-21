@@ -578,7 +578,8 @@ function ObjectDetails({ object, deviceId }) {
                 setIsMappingMode(false);
                 alert('MQTT mapping saved successfully!');
             } else {
-                alert('Failed to save mapping');
+                const error = await response.text();
+                alert('Failed to save mapping: ' + error);
             }
         } catch (error) {
             alert('Error saving mapping: ' + error.message);
@@ -603,6 +604,10 @@ function ObjectDetails({ object, deviceId }) {
         }
     };
 
+    // Get present-value if it exists
+    const presentValue = object.properties?.['present-value'];
+    const hasValue = presentValue !== undefined;
+
     return (
         <div className="main-content">
             <div className="content-header">
@@ -614,6 +619,33 @@ function ObjectDetails({ object, deviceId }) {
                 </div>
             </div>
             <div className="content-body">
+                {/* Current Value Display */}
+                {hasValue && (
+                    <div style={{
+                        background: 'linear-gradient(135deg, #10b98115 0%, #059669(15 100%)',
+                        padding: '2rem',
+                        borderRadius: '12px',
+                        border: '2px solid #10b981',
+                        marginBottom: '1.5rem',
+                        textAlign: 'center'
+                    }}>
+                        <div style={{fontSize: '0.9rem', color: '#065f46', marginBottom: '0.5rem', fontWeight: 600}}>
+                            CURRENT VALUE
+                        </div>
+                        <div style={{fontSize: '3rem', fontWeight: 700, color: '#047857', marginBottom: '0.5rem'}}>
+                            {String(presentValue.value)}
+                            {presentValue.unit && (
+                                <span style={{fontSize: '1.5rem', marginLeft: '0.5rem', color: '#059669'}}>
+                                    {presentValue.unit}
+                                </span>
+                            )}
+                        </div>
+                        <div className="timestamp">
+                            Last updated: {new Date(presentValue.timestamp).toLocaleString()}
+                        </div>
+                    </div>
+                )}
+
                 <div className="info-grid">
                     <div className="info-card">
                         <div className="info-label">Object Type</div>
@@ -737,7 +769,7 @@ function ObjectDetails({ object, deviceId }) {
 
                 {Object.keys(object.properties || {}).length > 0 && (
                     <div style={{marginTop: '1.5rem'}}>
-                        <h3 style={{marginBottom: '1rem'}}>Properties</h3>
+                        <h3 style={{marginBottom: '1rem'}}>All Properties</h3>
                         <table className="properties-table">
                             <thead>
                                 <tr>
