@@ -174,11 +174,11 @@ class BACnetReaderWriter:
         return results
     
     async def poll_object(
-    self,
-    device: BACnetDevice,
-    obj: BACnetObject,
-    properties: List[str]
-    ) -> dict:
+        self,
+        device: BACnetDevice,
+        obj: BACnetObject,
+        properties: List[str]
+        ) -> dict:
     """
     Poll an object for specified properties and update the device model
     
