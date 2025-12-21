@@ -178,7 +178,7 @@ class BACnetReaderWriter:
     device: BACnetDevice,
     obj: BACnetObject,
     properties: List[str]
-) -> dict:
+    ) -> dict:
     """
     Poll an object for specified properties and update the device model
     
