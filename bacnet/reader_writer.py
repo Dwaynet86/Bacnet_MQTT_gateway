@@ -263,17 +263,22 @@ class BACnetReaderWriter:
             device: BACnet device
             properties: List of property identifiers to read
         """
-        logger.debug(f"Polling device {device.device_id}")
+        logger.info(f"Polling device {device.device_id} - {len(device.objects)} objects")  # Changed to INFO
         
+        successful_reads = 0
         for obj in device.objects.values():
             try:
-                await self.poll_object(device, obj, properties)
+                results = await self.poll_object(device, obj, properties)
+                if results:
+                    successful_reads += 1
+                    logger.debug(f"Read {len(results)} properties from {obj.object_type}:{obj.object_instance}")
             except Exception as e:
                 logger.error(
                     f"Error polling {obj.object_type}:{obj.object_instance}: {e}"
                 )
         
         device.update_last_seen()
+        logger.info(f"Polling complete for device {device.device_id}: {successful_reads}/{len(device.objects)} objects read successfully")
 
 
 class BACnetPoller:
