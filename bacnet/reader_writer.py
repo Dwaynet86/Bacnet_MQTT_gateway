@@ -190,65 +190,65 @@ class BACnetReaderWriter:
         Returns:
             Dictionary of property values
         """
-    results = {}
-    
-    # Track which properties this object doesn't support to avoid repeated attempts
-    if not hasattr(obj, '_unsupported_properties'):
-        obj._unsupported_properties = set()
-    
-    for prop_id in properties:
-        # Skip properties we know this object doesn't support
-        if prop_id in obj._unsupported_properties:
-            continue
-            
-        try:
-            value = await self.read_property(
-                device.device_id,
-                obj.object_type,
-                obj.object_instance,
-                prop_id
-            )
-            
-            if value is not None:
-                # Try to get engineering units if reading present-value
-                unit = None
-                if prop_id == 'present-value' and 'units' not in obj._unsupported_properties:
-                    try:
-                        unit_value = await self.read_property(
-                            device.device_id,
-                            obj.object_type,
-                            obj.object_instance,
-                            'units'
-                        )
-                        if unit_value:
-                            unit = str(unit_value)
-                    except Exception as e:
-                        error_msg = str(e).lower()
-                        if 'unknown-property' in error_msg:
-                            obj._unsupported_properties.add('units')
+        results = {}
+        
+        # Track which properties this object doesn't support to avoid repeated attempts
+        if not hasattr(obj, '_unsupported_properties'):
+            obj._unsupported_properties = set()
+        
+        for prop_id in properties:
+            # Skip properties we know this object doesn't support
+            if prop_id in obj._unsupported_properties:
+                continue
                 
-                # Update object property
-                obj.update_property(prop_id, value, unit)
-                results[prop_id] = value
-            else:
-                # If we got None, the property might not be supported
-                obj._unsupported_properties.add(prop_id)
+            try:
+                value = await self.read_property(
+                    device.device_id,
+                    obj.object_type,
+                    obj.object_instance,
+                    prop_id
+                )
                 
-        except Exception as e:
-            error_msg = str(e).lower()
-            if 'unknown-property' in error_msg:
-                # Mark this property as unsupported to avoid future attempts
-                obj._unsupported_properties.add(prop_id)
-                logger.debug(
-                    f"Property {prop_id} not supported on "
-                    f"{obj.object_type}:{obj.object_instance}"
-                )
-            else:
-                logger.debug(
-                    f"Error reading {prop_id} from "
-                    f"{obj.object_type}:{obj.object_instance}: {e}"
-                )
-    
+                if value is not None:
+                    # Try to get engineering units if reading present-value
+                    unit = None
+                    if prop_id == 'present-value' and 'units' not in obj._unsupported_properties:
+                        try:
+                            unit_value = await self.read_property(
+                                device.device_id,
+                                obj.object_type,
+                                obj.object_instance,
+                                'units'
+                            )
+                            if unit_value:
+                                unit = str(unit_value)
+                        except Exception as e:
+                            error_msg = str(e).lower()
+                            if 'unknown-property' in error_msg:
+                                obj._unsupported_properties.add('units')
+                    
+                    # Update object property
+                    obj.update_property(prop_id, value, unit)
+                    results[prop_id] = value
+                else:
+                    # If we got None, the property might not be supported
+                    obj._unsupported_properties.add(prop_id)
+                    
+            except Exception as e:
+                error_msg = str(e).lower()
+                if 'unknown-property' in error_msg:
+                    # Mark this property as unsupported to avoid future attempts
+                    obj._unsupported_properties.add(prop_id)
+                    logger.debug(
+                        f"Property {prop_id} not supported on "
+                        f"{obj.object_type}:{obj.object_instance}"
+                    )
+                else:
+                    logger.debug(
+                        f"Error reading {prop_id} from "
+                        f"{obj.object_type}:{obj.object_instance}: {e}"
+                    )
+        
     return results
     
     async def poll_device_objects(
