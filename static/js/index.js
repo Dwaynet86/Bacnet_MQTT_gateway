@@ -19,6 +19,18 @@ function App() {
         return () => clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        if (selectedItem && selectedItem.type === 'device') {
+            const interval = setInterval(async () => {
+                const updated = await loadDeviceDetails(selectedItem.id);
+                if (updated) {
+                    setSelectedItem({ ...selectedItem, data: updated });
+                }
+            }, 5000);
+            return () => clearInterval(interval);
+        }
+    }, [selectedItem]);
+
     const loadDevices = async () => {
         try {
             const response = await fetch(`${API_BASE}/devices`);
