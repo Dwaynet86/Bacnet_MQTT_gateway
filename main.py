@@ -353,38 +353,35 @@ class BACnetMQTTGateway:
         self.logger.info("Stopping BACnet-MQTT Gateway")
         self.running = False
         
-        # BACpypes3 SimpleArgumentParser handles BBMD unregistration automatically
-        
-        # Stop poller
+        # Stop poller first (with timeout)
         if self.poller:
-            await self.poller.stop()
+            try:
+                await asyncio.wait_for(self.poller.stop(), timeout=5.0)
+            except asyncio.TimeoutError:
+                self.logger.warning("Poller stop timed out")
+            except Exception as e:
+                self.logger.error(f"Error stopping poller: {e}")
         
         # Stop MQTT service
         if self.mqtt_service:
-            await self.mqtt_service.stop()
+            try:
+                await asyncio.wait_for(self.mqtt_service.stop(), timeout=5.0)
+            except asyncio.TimeoutError:
+                self.logger.warning("MQTT service stop timed out")
+            except Exception as e:
+                self.logger.error(f"Error stopping MQTT service: {e}")
         
         # Stop API server
         if self.api_server:
             self.api_server.should_exit = True
         
         # Save device registry
-        self.device_registry.save()
+        try:
+            self.device_registry.save()
+        except Exception as e:
+            self.logger.error(f"Error saving device registry: {e}")
         
         self.logger.info("Gateway stopped")
-    
-    async def run(self):
-        """Run the gateway"""
-        await self.initialize()
-        await self.start()
-        
-        # Wait for shutdown signal
-        try:
-            while self.running:
-                await asyncio.sleep(1)
-        except KeyboardInterrupt:
-            self.logger.info("Received shutdown signal")
-        finally:
-            await self.stop()
 
 
 async def main():
