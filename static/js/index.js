@@ -589,7 +589,7 @@ function ObjectDetails({ object, deviceId }) {
         try {
             const response = await fetch(`${window.location.origin}/read`, {
                 method: 'POST',
-                headers: { 'Content-Type': application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     device_id: deviceId,
                     object_type: object.object_type,
