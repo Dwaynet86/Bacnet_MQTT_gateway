@@ -249,10 +249,6 @@ class BACnetReaderWriter:
                 if 'unknown-property' in error_msg:
                     # Mark this property as unsupported to avoid future attempts
                     obj._unsupported_properties.add(prop_id)
-                    logger.debug(
-                        f"Property {prop_id} not supported on "
-                        f"{obj.object_type}:{obj.object_instance}"
-                    )
                 else:
                     logger.debug(
                         f"Error reading {prop_id} from "
