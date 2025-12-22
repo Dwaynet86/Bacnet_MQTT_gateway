@@ -74,7 +74,7 @@ class BACnetMQTTGateway:
             'polling': {
                 'enabled': True,
                 'default_interval': 60,
-                'properties': ['present-value', 'status-flags']
+                'properties': ['present-value']
             },
             'mqtt': {
                 'broker': 'localhost',
@@ -382,6 +382,20 @@ class BACnetMQTTGateway:
             self.logger.error(f"Error saving device registry: {e}")
         
         self.logger.info("Gateway stopped")
+    
+    async def run(self):
+        """Run the gateway"""
+        await self.initialize()
+        await self.start()
+        
+        # Wait for shutdown signal
+        try:
+            while self.running:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            self.logger.info("Received shutdown signal")
+        finally:
+            await self.stop()
 
 
 async def main():
