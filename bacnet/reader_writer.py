@@ -56,11 +56,15 @@ class BACnetReaderWriter:
                 f"on device {device_id}"
             )
             
-            value = await self.app.read_property(
-                address,
-                obj_id,
-                prop_id,
-                array_index=array_index
+            # Add timeout to prevent hanging
+            value = await asyncio.wait_for(
+                self.app.read_property(
+                    address,
+                    obj_id,
+                    prop_id,
+                    array_index=array_index
+                ),
+                timeout=5.0  # 5 second timeout per read
             )
             
             # Update device's last seen timestamp
@@ -68,6 +72,12 @@ class BACnetReaderWriter:
             
             return value
             
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"Timeout reading {property_id} from {object_type}:{object_instance} "
+                f"on device {device_id}"
+            )
+            return None
         except Exception as e:
             error_msg = str(e)
             # Only log errors that aren't common "property not supported" issues
@@ -322,38 +332,46 @@ class BACnetPoller:
                 logger.debug(f"Error during poller shutdown: {e}")
         logger.info("BACnet poller stopped")
     
-    async def _poll_loop(self):
-        """Main polling loop"""
-        while self.running:
-            try:
-                devices = self.device_registry.get_enabled_devices()
-                
-                for device in devices:
-                    if not self.running:  # Check if we should stop
-                        break
-                        
-                    if not device.enabled:
-                        continue
+async def _poll_loop(self):
+    """Main polling loop"""
+    while self.running:
+        try:
+            devices = self.device_registry.get_enabled_devices()
+            logger.info(f"Polling {len(devices)} enabled devices")
+            
+            for device in devices:
+                if not self.running:  # Check if we should stop
+                    break
                     
-                    try:
-                        await self.reader_writer.poll_device_objects(
+                if not device.enabled:
+                    continue
+                
+                try:
+                    # Add timeout for entire device poll
+                    await asyncio.wait_for(
+                        self.reader_writer.poll_device_objects(
                             device,
                             self.properties
-                        )
-                    except Exception as e:
-                        if self.running:  # Only log if not shutting down
-                            logger.error(f"Error polling device {device.device_id}: {e}")
-                
-                # Save registry after polling
-                if self.running:
-                    self.device_registry.save()
-                
-                await asyncio.sleep(self.default_interval)
-                
-            except asyncio.CancelledError:
-                logger.debug("Polling loop cancelled")
-                break
-            except Exception as e:
-                if self.running:  # Only log if not shutting down
-                    logger.error(f"Error in poll loop: {e}")
-                    await asyncio.sleep(5)
+                        ),
+                        timeout=30.0  # 30 second timeout per device
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"Timeout polling device {device.device_id}")
+                except Exception as e:
+                    if self.running:  # Only log if not shutting down
+                        logger.error(f"Error polling device {device.device_id}: {e}")
+            
+            # Save registry after polling
+            if self.running:
+                self.device_registry.save()
+                logger.info(f"Polling cycle complete, sleeping {self.default_interval}s")
+            
+            await asyncio.sleep(self.default_interval)
+            
+        except asyncio.CancelledError:
+            logger.info("Polling loop cancelled")
+            break
+        except Exception as e:
+            if self.running:  # Only log if not shutting down
+                logger.error(f"Error in poll loop: {e}")
+                await asyncio.sleep(5)
