@@ -343,8 +343,8 @@ class MQTTPublishingService:
                     
                     await asyncio.sleep(self.publish_interval)
                     
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"Error in publishing loop: {e}")
-            await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in publishing loop: {e}")
+                await asyncio.sleep(5)
