@@ -410,3 +410,25 @@ class APIController:
         async def get_all_mappings():
             """Get all MQTT mappings"""
             return [m.to_dict() for m in self.mqtt_mapping_registry.get_all_mappings()]
+        
+        @self.app.put("/devices/{device_id}/mqtt-status/enable")
+        async def enable_mqtt_status(device_id: int):
+            """Enable MQTT status publishing for a device"""
+            device = self.device_registry.get_device(device_id)
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not found")
+            
+            device.mqtt_status_enabled = True
+            self.device_registry.save()
+            return {"message": f"MQTT status enabled for device {device_id}"}
+        
+        @self.app.put("/devices/{device_id}/mqtt-status/disable")
+        async def disable_mqtt_status(device_id: int):
+            """Disable MQTT status publishing for a device"""
+            device = self.device_registry.get_device(device_id)
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not found")
+            
+            device.mqtt_status_enabled = False
+            self.device_registry.save()
+            return {"message": f"MQTT status disabled for device {device_id}"}
