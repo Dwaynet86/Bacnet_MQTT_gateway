@@ -245,11 +245,6 @@ class MQTTPublisher:
             Number of properties published
         """
         count = 0
-        
-        # Only publish status if enabled for this device
-        if device.mqtt_status_enabled:
-            self.publish_device_status(device)
-        
         for obj in device.objects.values():
             count += self.publish_object(device, obj)
         return count
