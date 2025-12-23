@@ -356,6 +356,7 @@ class BACnetMQTTGateway:
         # Stop poller first (with timeout)
         if self.poller:
             try:
+                self.logger.info("Stopping Bacnet Poller")
                 await asyncio.wait_for(self.poller.stop(), timeout=5.0)
             except asyncio.TimeoutError:
                 self.logger.warning("Poller stop timed out")
@@ -365,6 +366,7 @@ class BACnetMQTTGateway:
         # Stop MQTT service
         if self.mqtt_service:
             try:
+                self.logger.info("Stopping MQTT Service")
                 await asyncio.wait_for(self.mqtt_service.stop(), timeout=5.0)
             except asyncio.TimeoutError:
                 self.logger.warning("MQTT service stop timed out")
