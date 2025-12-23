@@ -476,6 +476,35 @@ function DetailPanel({ selectedItem }) {
 }
 
 function DeviceDetails({ device }) {
+    const [mqttStatusEnabled, setMqttStatusEnabled] = useState(device.mqtt_status_enabled !== false);
+    const [isUpdating, setIsUpdating] = useState(false);
+
+    useEffect(() => {
+        setMqttStatusEnabled(device.mqtt_status_enabled !== false);
+    }, [device.device_id]);
+
+    const handleMqttStatusToggle = async () => {
+        setIsUpdating(true);
+        const newState = !mqttStatusEnabled;
+        const action = newState ? 'enable' : 'disable';
+        
+        try {
+            const response = await fetch(`${window.location.origin}/devices/${device.device_id}/mqtt-status/${action}`, {
+                method: 'PUT'
+            });
+            
+            if (response.ok) {
+                setMqttStatusEnabled(newState);
+            } else {
+                alert('Failed to update MQTT status setting');
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
     return (
         <div className="main-content">
             <div className="content-header">
@@ -512,6 +541,48 @@ function DeviceDetails({ device }) {
                     </div>
                 </div>
 
+                {/* MQTT Status Control Section */}
+                <div className="mqtt-mapping-section" style={{marginTop: '1.5rem'}}>
+                    <div className="mqtt-mapping-header">
+                        <h3 style={{margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                            📡 MQTT Status Publishing
+                        </h3>
+                        <span className={`badge ${mqttStatusEnabled ? 'badge-success' : 'badge-warning'}`}>
+                            {mqttStatusEnabled ? 'Active' : 'Disabled'}
+                        </span>
+                    </div>
+                    
+                    <p style={{color: '#6b7280', marginBottom: '1rem', fontSize: '0.9rem'}}>
+                        Control whether this device publishes status messages to MQTT. 
+                        Status messages include device availability, online status, and object count.
+                    </p>
+
+                    <div style={{
+                        background: mqttStatusEnabled ? '#d1fae5' : '#fef3c7',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        marginBottom: '1rem',
+                        border: `2px solid ${mqttStatusEnabled ? '#10b981' : '#f59e0b'}`
+                    }}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem'}}>
+                            <strong style={{color: mqttStatusEnabled ? '#065f46' : '#92400e'}}>
+                                {mqttStatusEnabled ? '✓ Publishing Status' : '⚠ Not Publishing Status'}
+                            </strong>
+                        </div>
+                        <div style={{fontSize: '0.85rem', color: '#6b7280'}}>
+                            Topic: <code>bacnet/{device.device_id}/status</code>
+                        </div>
+                    </div>
+
+                    <button 
+                        className={`btn ${mqttStatusEnabled ? 'btn-danger' : 'btn-success'}`}
+                        onClick={handleMqttStatusToggle}
+                        disabled={isUpdating}
+                    >
+                        {isUpdating ? '⏳ Updating...' : (mqttStatusEnabled ? '🔇 Disable Status Publishing' : '🔊 Enable Status Publishing')}
+                    </button>
+                </div>
+
                 <div style={{marginTop: '1.5rem'}}>
                     <h3 style={{marginBottom: '1rem'}}>Device Information</h3>
                     <table className="properties-table">
@@ -535,6 +606,14 @@ function DeviceDetails({ device }) {
                             <tr>
                                 <td><strong>Firmware</strong></td>
                                 <td>{device.firmware_revision || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>MQTT Status Publishing</strong></td>
+                                <td>
+                                    <span className={`badge ${mqttStatusEnabled ? 'badge-success' : 'badge-warning'}`}>
+                                        {mqttStatusEnabled ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
