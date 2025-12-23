@@ -152,77 +152,77 @@ class MQTTPublisher:
         
         return json.dumps(payload)
     
-    def publish_property(
-        self,
-        device: BACnetDevice,
-        obj: BACnetObject,
-        property_id: str
-    ) -> bool:
-        """
-        Publish a single property to MQTT
-        
-        Returns:
-            True if published successfully
-        """
-        if not self.connected:
-            logger.warning("Not connected to MQTT broker")
+def publish_property(
+    self,
+    device: BACnetDevice,
+    obj: BACnetObject,
+    property_id: str
+) -> bool:
+    """
+    Publish a single property to MQTT
+    
+    Returns:
+        True if published successfully
+    """
+    if not self.connected:
+        logger.debug("Not connected to MQTT broker")
+        return False
+    
+    try:
+        # Get property from object
+        prop = obj.properties.get(property_id)
+        if not prop:
+            logger.debug(f"Property {property_id} not found in object {obj.object_type}:{obj.object_instance}")
             return False
         
-        try:
-            # Get property from object
-            prop = obj.properties.get(property_id)
-            if not prop:
-                logger.debug(f"Property {property_id} not found in object")
-                return False
-            
-            # Check if there's a custom mapping for this object
-            topic = None
-            if self.mqtt_mapping_registry:
-                mapping = self.mqtt_mapping_registry.get_mapping(
-                    device.device_id,
-                    obj.object_type,
-                    obj.object_instance
-                )
-                if mapping and mapping.enabled:
-                    topic = mapping.mqtt_topic
-                    logger.debug(f"Using mapped topic: {topic}")
-            
-            # Fall back to default topic if no mapping
-            if not topic:
-                topic = self._build_topic(
-                    device.device_id,
-                    obj.object_type,
-                    obj.object_instance,
-                    property_id
-                )
-            
-            payload = self._build_payload(
-                prop.value,
-                device,
-                obj,
-                property_id,
-                prop.timestamp,
-                prop.unit
+        # Check if there's a custom mapping for this object
+        topic = None
+        if self.mqtt_mapping_registry:
+            mapping = self.mqtt_mapping_registry.get_mapping(
+                device.device_id,
+                obj.object_type,
+                obj.object_instance
             )
-            
-            # Publish
-            result = self.client.publish(
-                topic,
-                payload,
-                qos=self.qos,
-                retain=self.retain
+            if mapping and mapping.enabled:
+                topic = mapping.custom_topic if mapping.custom_topic else mapping.mqtt_topic
+                logger.debug(f"Using mapped topic for {device.device_id}/{obj.object_type}:{obj.object_instance}: {topic}")
+        
+        # Fall back to default topic if no mapping
+        if not topic:
+            topic = self._build_topic(
+                device.device_id,
+                obj.object_type,
+                obj.object_instance,
+                property_id
             )
-            
-            if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.debug(f"Published to {topic}")
-                return True
-            else:
-                logger.error(f"Failed to publish to {topic}: {result.rc}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error publishing property: {e}")
+        
+        payload = self._build_payload(
+            prop.value,
+            device,
+            obj,
+            property_id,
+            prop.timestamp,
+            prop.unit
+        )
+        
+        # Publish
+        result = self.client.publish(
+            topic,
+            payload,
+            qos=self.qos,
+            retain=self.retain
+        )
+        
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            logger.info(f"Published to {topic}: {prop.value}")  # Changed to INFO so you can see it
+            return True
+        else:
+            logger.error(f"Failed to publish to {topic}: {result.rc}")
             return False
+            
+    except Exception as e:
+        logger.error(f"Error publishing property: {e}")
+        return False
     
     def publish_object(self, device: BACnetDevice, obj: BACnetObject) -> int:
         """
