@@ -311,40 +311,40 @@ class MQTTPublishingService:
         self.publisher.disconnect()
         logger.info("MQTT publishing service stopped")
     
-async def _publish_loop(self):
-    """Main publishing loop"""
-    while self.running:
-        try:
-            if not self.publisher.connected:
-                logger.warning("MQTT not connected, waiting...")
-                await asyncio.sleep(5)
-                continue
-            
-            devices = self.device_registry.get_enabled_devices()
-            
-            total_published = 0
-            for device in devices:
-                try:
-                    # Publish device status (only if enabled for this device)
-                    if device.mqtt_status_enabled:
-                        self.publisher.publish_device_status(device)
+    async def _publish_loop(self):
+        """Main publishing loop"""
+        while self.running:
+            try:
+                if not self.publisher.connected:
+                    logger.warning("MQTT not connected, waiting...")
+                    await asyncio.sleep(5)
+                    continue
+                
+                devices = self.device_registry.get_enabled_devices()
+                
+                total_published = 0
+                for device in devices:
+                    try:
+                        # Publish device status (only if enabled for this device)
+                        if device.mqtt_status_enabled:
+                            self.publisher.publish_device_status(device)
+                        
+                        # Publish all device data
+                        count = self.publisher.publish_device(device)
+                        total_published += count
+                        
+                    except Exception as e:
+                        logger.error(
+                            f"Error publishing device {device.device_id}: {e}"
+                        )
                     
-                    # Publish all device data
-                    count = self.publisher.publish_device(device)
-                    total_published += count
+                    if total_published > 0:
+                        logger.debug(f"Published {total_published} properties to MQTT")
                     
+                    await asyncio.sleep(self.publish_interval)
+                    
+                except asyncio.CancelledError:
+                    break
                 except Exception as e:
-                    logger.error(
-                        f"Error publishing device {device.device_id}: {e}"
-                    )
-                
-                if total_published > 0:
-                    logger.debug(f"Published {total_published} properties to MQTT")
-                
-                await asyncio.sleep(self.publish_interval)
-                
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in publishing loop: {e}")
-                await asyncio.sleep(5)
+                    logger.error(f"Error in publishing loop: {e}")
+                    await asyncio.sleep(5)
