@@ -65,6 +65,7 @@ class BACnetDevice:
     discovered_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     last_seen: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     enabled: bool = True
+    mqtt_status_enabled: bool = True
     
     def to_dict(self) -> Dict:
         data = asdict(self)
