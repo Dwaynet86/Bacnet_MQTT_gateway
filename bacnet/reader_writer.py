@@ -269,6 +269,10 @@ class BACnetReaderWriter:
             device: BACnet device
             properties: List of property identifiers to read
         """
+        logger.info(f"Starting poll for device {device.device_id}")
+        logger.info(f"  Device enabled: {device.enabled}")
+        logger.info(f"  Object count: {len(device.objects)}")
+        logger.info(f"  Properties to read: {properties}")
         logger.info(f"Polling device {device.device_id} - {len(device.objects)} objects")  # Changed to INFO
         
         successful_reads = 0
