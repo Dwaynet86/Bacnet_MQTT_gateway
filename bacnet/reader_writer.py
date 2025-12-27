@@ -183,79 +183,78 @@ class BACnetReaderWriter:
         
         return results
     
-    async def poll_object(
-        self,
-        device: BACnetDevice,
-        obj: BACnetObject,
-        properties: List[str]
-    ) -> dict:
-        """
-        Poll an object for specified properties and update the device model
-        
-        Args:
-            device: BACnet device
-            obj: BACnet object to poll
-            properties: List of property identifiers to read
+async def poll_object(
+    self,
+    device: BACnetDevice,
+    obj: BACnetObject,
+    properties: List[str]
+) -> dict:
+    """
+    Poll an object for specified properties and update the device model
+    """
+    results = {}
+    
+    # Track which properties this object doesn't support to avoid repeated attempts
+    if not hasattr(obj, '_unsupported_properties'):
+        obj._unsupported_properties = set()
+    
+    logger.debug(f"Polling {obj.object_type}:{obj.object_instance} on device {device.device_id}")
+    
+    for prop_id in properties:
+        # Skip properties we know this object doesn't support
+        if prop_id in obj._unsupported_properties:
+            logger.debug(f"  Skipping {prop_id} (marked as unsupported)")
+            continue
             
-        Returns:
-            Dictionary of property values
-        """
-        results = {}
-        
-        # Track which properties this object doesn't support to avoid repeated attempts
-        if not hasattr(obj, '_unsupported_properties'):
-            obj._unsupported_properties = set()
-        
-        for prop_id in properties:
-            # Skip properties we know this object doesn't support
-            if prop_id in obj._unsupported_properties:
-                continue
+        try:
+            logger.debug(f"  Reading {prop_id}...")
+            value = await self.read_property(
+                device.device_id,
+                obj.object_type,
+                obj.object_instance,
+                prop_id
+            )
+            
+            logger.debug(f"  Got value: {value}")
+            
+            if value is not None:
+                # Try to get engineering units if reading present-value
+                unit = None
+                if prop_id == 'present-value' and 'units' not in obj._unsupported_properties:
+                    try:
+                        unit_value = await self.read_property(
+                            device.device_id,
+                            obj.object_type,
+                            obj.object_instance,
+                            'units'
+                        )
+                        if unit_value:
+                            unit = str(unit_value)
+                    except Exception as e:
+                        error_msg = str(e).lower()
+                        if 'unknown-property' in error_msg:
+                            obj._unsupported_properties.add('units')
                 
-            try:
-                value = await self.read_property(
-                    device.device_id,
-                    obj.object_type,
-                    obj.object_instance,
-                    prop_id
-                )
+                # Update object property
+                logger.info(f"  Updating property {prop_id} on {obj.object_type}:{obj.object_instance} with value: {value}")
+                obj.update_property(prop_id, value, unit)
+                results[prop_id] = value
+            else:
+                logger.warning(f"  Got None for {prop_id}, marking as unsupported")
+                # If we got None, the property might not be supported
+                obj._unsupported_properties.add(prop_id)
                 
-                if value is not None:
-                    # Try to get engineering units if reading present-value
-                    unit = None
-                    if prop_id == 'present-value' and 'units' not in obj._unsupported_properties:
-                        try:
-                            unit_value = await self.read_property(
-                                device.device_id,
-                                obj.object_type,
-                                obj.object_instance,
-                                'units'
-                            )
-                            if unit_value:
-                                unit = str(unit_value)
-                        except Exception as e:
-                            error_msg = str(e).lower()
-                            if 'unknown-property' in error_msg:
-                                obj._unsupported_properties.add('units')
-                    
-                    # Update object property
-                    obj.update_property(prop_id, value, unit)
-                    results[prop_id] = value
-                else:
-                    # If we got None, the property might not be supported
-                    obj._unsupported_properties.add(prop_id)
-                    
-            except Exception as e:
-                error_msg = str(e).lower()
-                if 'unknown-property' in error_msg:
-                    # Mark this property as unsupported to avoid future attempts
-                    obj._unsupported_properties.add(prop_id)
-                else:
-                    logger.debug(
-                        f"Error reading {prop_id} from "
-                        f"{obj.object_type}:{obj.object_instance}: {e}"
-                    )
-        
-        return results
+        except Exception as e:
+            error_msg = str(e).lower()
+            if 'unknown-property' in error_msg:
+                # Mark this property as unsupported to avoid future attempts
+                logger.debug(f"  Property {prop_id} not supported (unknown-property error)")
+                obj._unsupported_properties.add(prop_id)
+            else:
+                logger.warning(f"  Error reading {prop_id}: {e}")
+    
+    logger.debug(f"Poll complete for {obj.object_type}:{obj.object_instance}, results: {list(results.keys())}")
+    return results
     
     async def poll_device_objects(
         self,
