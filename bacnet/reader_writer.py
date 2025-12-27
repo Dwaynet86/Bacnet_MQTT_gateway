@@ -272,11 +272,36 @@ class BACnetReaderWriter:
         logger.info(f"  Device enabled: {device.enabled}")
         logger.info(f"  Object count: {len(device.objects)}")
         logger.info(f"  Properties to read: {properties}")
-        logger.info(f"Polling device {device.device_id} - {len(device.objects)} objects")  # Changed to INFO
+        
+        if len(device.objects) == 0:
+            logger.warning(f"Device {device.device_id} has no objects to poll!")
+            return
+        
+        logger.info(f"Polling device {device.device_id} - {len(device.objects)} objects")
+        
+        # Define which object types support present-value
+        PRESENT_VALUE_TYPES = {
+            'analog-input', 'analog-output', 'analog-value',
+            'binary-input', 'binary-output', 'binary-value',
+            'multi-state-input', 'multi-state-output', 'multi-state-value',
+            'accumulator', 'pulse-converter', 'loop',
+            'integer-value', 'positive-integer-value',
+            'large-analog-value', 'octetstring-value',
+            'characterstring-value', 'time-value', 'datetime-value',
+            'datepattern-value', 'timepattern-value', 'datetimepattern-value'
+        }
         
         successful_reads = 0
+        skipped_objects = 0
+        
         for obj in device.objects.values():
             try:
+                # Skip objects that don't support present-value if that's what we're polling
+                if 'present-value' in properties and obj.object_type not in PRESENT_VALUE_TYPES:
+                    logger.debug(f"Skipping {obj.object_type}:{obj.object_instance} (doesn't support present-value)")
+                    skipped_objects += 1
+                    continue
+                
                 results = await self.poll_object(device, obj, properties)
                 if results:
                     successful_reads += 1
@@ -287,8 +312,7 @@ class BACnetReaderWriter:
                 )
         
         device.update_last_seen()
-        logger.info(f"Polling complete for device {device.device_id}: {successful_reads}/{len(device.objects)} objects read successfully")
-
+        logger.info(f"Polling complete for device {device.device_id}: {successful_reads} reads, {skipped_objects} skipped")
 
 class BACnetPoller:
     """Periodic polling service for BACnet devices"""
