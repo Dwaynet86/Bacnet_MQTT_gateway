@@ -51,11 +51,6 @@ class BACnetReaderWriter:
             address = Address(device.address)
             prop_id = PropertyIdentifier(property_id)
             
-            logger.debug(
-                f"Reading {property_id} from {object_type}:{object_instance} "
-                f"on device {device_id}"
-            )
-            
             # Add timeout to prevent hanging
             value = await asyncio.wait_for(
                 self.app.read_property(
