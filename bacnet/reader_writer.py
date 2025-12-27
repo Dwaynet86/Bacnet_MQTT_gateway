@@ -384,31 +384,31 @@ class BACnetPoller:
                 logger.info(f"Polling {len(devices)} enabled devices")
                 
                 for device in devices:
-                    if not self.running:  # Check if we should stop
+                    if not self.running:
                         break
                         
                     if not device.enabled:
                         continue
                     
                     try:
-                        # Add timeout for entire device poll
                         await asyncio.wait_for(
                             self.reader_writer.poll_device_objects(
                                 device,
                                 self.properties
                             ),
-                            timeout=30.0  # 30 second timeout per device
+                            timeout=60.0  # Increased timeout
                         )
                     except asyncio.TimeoutError:
-                        logger.error(f"Timeout polling device {device.device_id}")
+                        logger.error(f"⏱ Timeout polling device {device.device_id}")
                     except Exception as e:
-                        if self.running:  # Only log if not shutting down
-                            logger.error(f"Error polling device {device.device_id}: {e}")
+                        if self.running:
+                            logger.error(f"✗ Error polling device {device.device_id}: {e}")
                 
                 # Save registry after polling
                 if self.running:
+                    logger.info("💾 Saving device registry...")
                     self.device_registry.save()
-                    logger.info(f"Polling cycle complete, sleeping {self.default_interval}s")
+                    logger.info(f"✓ Polling cycle complete, sleeping {self.default_interval}s")
                 
                 await asyncio.sleep(self.default_interval)
                 
@@ -416,6 +416,6 @@ class BACnetPoller:
                 logger.info("Polling loop cancelled")
                 break
             except Exception as e:
-                if self.running:  # Only log if not shutting down
+                if self.running:
                     logger.error(f"Error in poll loop: {e}")
                     await asyncio.sleep(5)
