@@ -328,8 +328,8 @@ class BACnetMQTTGateway:
             asyncio.create_task(self._periodic_discovery())
         
         self.logger.info("Gateway started successfully")
-        self.logger.info("Access the API at http://localhost:8080")
-        self.logger.info("View API docs at http://localhost:8080/docs")
+        self.logger.info("Access the API at http://{api_config['host']}:{api_config['port']}")
+        self.logger.info("View API docs at http://{api_config['host']}:{api_config['port']}/docs")
     
     async def _periodic_discovery(self):
         """Periodically discover new devices"""
