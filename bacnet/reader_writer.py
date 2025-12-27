@@ -206,6 +206,13 @@ class BACnetReaderWriter:
         if not hasattr(obj, '_unsupported_properties'):
             obj._unsupported_properties = set()
         
+        # Define object types that support units
+        UNITS_SUPPORTED_TYPES = {
+            'analog-input', 'analog-output', 'analog-value',
+            'accumulator', 'pulse-converter', 'loop',
+            'large-analog-value'
+        }
+        
         logger.debug(f"Polling {obj.object_type}:{obj.object_instance} on device {device.device_id}")
         
         for prop_id in properties:
@@ -226,10 +233,13 @@ class BACnetReaderWriter:
                 logger.debug(f"  Read returned: {value} (type: {type(value).__name__ if value is not None else 'None'})")
                 
                 if value is not None:
-                    # Try to get engineering units if reading present-value
+                    # Try to get engineering units ONLY for analog types reading present-value
                     unit = None
-                    if prop_id == 'present-value' and 'units' not in obj._unsupported_properties:
+                    if (prop_id == 'present-value' and 
+                        obj.object_type in UNITS_SUPPORTED_TYPES and 
+                        'units' not in obj._unsupported_properties):
                         try:
+                            logger.debug(f"  Reading units...")
                             unit_value = await self.read_property(
                                 device.device_id,
                                 obj.object_type,
@@ -243,6 +253,7 @@ class BACnetReaderWriter:
                             error_msg = str(e).lower()
                             if 'unknown-property' in error_msg:
                                 obj._unsupported_properties.add('units')
+                                logger.debug(f"  Units not supported")
                     
                     # Update object property
                     logger.info(f"  ✓ Updating {obj.object_type}:{obj.object_instance}.{prop_id} = {value} {unit or ''}")
