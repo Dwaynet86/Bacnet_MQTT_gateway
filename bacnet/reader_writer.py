@@ -279,7 +279,7 @@ class BACnetReaderWriter:
                 else:
                     logger.warning(f"  ✗ Error reading {prop_id}: {e}")
         
-        if results:
+        #if results:
            # logger.debug(f"✓ Poll complete for {obj.object_type}:{obj.object_instance}, got: {list(results.keys())}")
         
         return results
