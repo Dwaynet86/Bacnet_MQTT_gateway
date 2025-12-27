@@ -224,7 +224,7 @@ def publish_property(
         logger.error(f"Error publishing property: {e}")
         return False
     
-    def publish_object(self, device: BACnetDevice, obj: BACnetObject) -> int:
+def publish_object(self, device: BACnetDevice, obj: BACnetObject) -> int:
     """
     Publish all properties of an object to MQTT
     
