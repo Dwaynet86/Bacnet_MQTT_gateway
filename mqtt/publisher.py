@@ -152,119 +152,119 @@ class MQTTPublisher:
         
         return json.dumps(payload)
     
-def publish_property(
-    self,
-    device: BACnetDevice,
-    obj: BACnetObject,
-    property_id: str
-) -> bool:
-    """
-    Publish a single property to MQTT
-    
-    Returns:
-        True if published successfully
-    """
-    if not self.connected:
-        logger.debug("Not connected to MQTT broker")
-        return False
-    
-    try:
-        # Get property from object
-        prop = obj.properties.get(property_id)
-        if not prop:
-            logger.debug(f"Property {property_id} not found in object {obj.object_type}:{obj.object_instance}")
+    def publish_property(
+        self,
+        device: BACnetDevice,
+        obj: BACnetObject,
+        property_id: str
+    ) -> bool:
+        """
+        Publish a single property to MQTT
+        
+        Returns:
+            True if published successfully
+        """
+        if not self.connected:
+            logger.debug("Not connected to MQTT broker")
             return False
         
-        # Check if there's a custom mapping for this object
-        topic = None
-        if self.mqtt_mapping_registry:
-            mapping = self.mqtt_mapping_registry.get_mapping(
-                device.device_id,
-                obj.object_type,
-                obj.object_instance
-            )
-            if mapping and mapping.enabled:
-                topic = mapping.custom_topic if mapping.custom_topic else mapping.mqtt_topic
-                logger.debug(f"Using mapped topic for {device.device_id}/{obj.object_type}:{obj.object_instance}: {topic}")
-        
-        # Fall back to default topic if no mapping
-        if not topic:
-            topic = self._build_topic(
-                device.device_id,
-                obj.object_type,
-                obj.object_instance,
-                property_id
-            )
-        
-        payload = self._build_payload(
-            prop.value,
-            device,
-            obj,
-            property_id,
-            prop.timestamp,
-            prop.unit
-        )
-        
-        # Publish
-        result = self.client.publish(
-            topic,
-            payload,
-            qos=self.qos,
-            retain=self.retain
-        )
-        
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info(f"Published to {topic}: {prop.value}")  # Changed to INFO so you can see it
-            return True
-        else:
-            logger.error(f"Failed to publish to {topic}: {result.rc}")
-            return False
+        try:
+            # Get property from object
+            prop = obj.properties.get(property_id)
+            if not prop:
+                logger.debug(f"Property {property_id} not found in object {obj.object_type}:{obj.object_instance}")
+                return False
             
-    except Exception as e:
-        logger.error(f"Error publishing property: {e}")
-        return False
+            # Check if there's a custom mapping for this object
+            topic = None
+            if self.mqtt_mapping_registry:
+                mapping = self.mqtt_mapping_registry.get_mapping(
+                    device.device_id,
+                    obj.object_type,
+                    obj.object_instance
+                )
+                if mapping and mapping.enabled:
+                    topic = mapping.custom_topic if mapping.custom_topic else mapping.mqtt_topic
+                    logger.debug(f"Using mapped topic for {device.device_id}/{obj.object_type}:{obj.object_instance}: {topic}")
+            
+            # Fall back to default topic if no mapping
+            if not topic:
+                topic = self._build_topic(
+                    device.device_id,
+                    obj.object_type,
+                    obj.object_instance,
+                    property_id
+                )
+            
+            payload = self._build_payload(
+                prop.value,
+                device,
+                obj,
+                property_id,
+                prop.timestamp,
+                prop.unit
+            )
+            
+            # Publish
+            result = self.client.publish(
+                topic,
+                payload,
+                qos=self.qos,
+                retain=self.retain
+            )
+            
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                logger.info(f"Published to {topic}: {prop.value}")  # Changed to INFO so you can see it
+                return True
+            else:
+                logger.error(f"Failed to publish to {topic}: {result.rc}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error publishing property: {e}")
+            return False
+        
+    def publish_object(self, device: BACnetDevice, obj: BACnetObject) -> int:
+        """
+        Publish all properties of an object to MQTT
+        
+        Returns:
+            Number of properties published
+        """
+        count = 0
+        logger.debug(f"Publishing object {obj.object_type}:{obj.object_instance} from device {device.device_id}")
+        logger.debug(f"  Object has {len(obj.properties)} properties: {list(obj.properties.keys())}")
+        
+        for property_id in obj.properties.keys():
+            logger.debug(f"  Attempting to publish property: {property_id}")
+            if self.publish_property(device, obj, property_id):
+                count += 1
+                logger.debug(f"    ✓ Published {property_id}")
+            else:
+                logger.debug(f"    ✗ Failed to publish {property_id}")
+        
+        logger.debug(f"  Published {count}/{len(obj.properties)} properties")
+        return count
     
-def publish_object(self, device: BACnetDevice, obj: BACnetObject) -> int:
-    """
-    Publish all properties of an object to MQTT
-    
-    Returns:
-        Number of properties published
-    """
-    count = 0
-    logger.debug(f"Publishing object {obj.object_type}:{obj.object_instance} from device {device.device_id}")
-    logger.debug(f"  Object has {len(obj.properties)} properties: {list(obj.properties.keys())}")
-    
-    for property_id in obj.properties.keys():
-        logger.debug(f"  Attempting to publish property: {property_id}")
-        if self.publish_property(device, obj, property_id):
-            count += 1
-            logger.debug(f"    ✓ Published {property_id}")
-        else:
-            logger.debug(f"    ✗ Failed to publish {property_id}")
-    
-    logger.debug(f"  Published {count}/{len(obj.properties)} properties")
-    return count
-
-def publish_device(self, device: BACnetDevice) -> int:
-    """
-    Publish all objects and properties of a device to MQTT
-    
-    Returns:
-        Number of properties published
-    """
-    count = 0
-    logger.debug(f"Publishing device {device.device_id} with {len(device.objects)} objects")
-    
-    for obj_key, obj in device.objects.items():
-        logger.debug(f"  Processing object: {obj_key}")
-        obj_count = self.publish_object(device, obj)
-        count += obj_count
-        if obj_count > 0:
-            logger.debug(f"    ✓ Published {obj_count} properties from {obj_key}")
-    
-    logger.info(f"Published {count} total properties from device {device.device_id}")
-    return count
+    def publish_device(self, device: BACnetDevice) -> int:
+        """
+        Publish all objects and properties of a device to MQTT
+        
+        Returns:
+            Number of properties published
+        """
+        count = 0
+        logger.debug(f"Publishing device {device.device_id} with {len(device.objects)} objects")
+        
+        for obj_key, obj in device.objects.items():
+            logger.debug(f"  Processing object: {obj_key}")
+            obj_count = self.publish_object(device, obj)
+            count += obj_count
+            if obj_count > 0:
+                logger.debug(f"    ✓ Published {obj_count} properties from {obj_key}")
+        
+        logger.info(f"Published {count} total properties from device {device.device_id}")
+        return count
     
     def publish_device_status(self, device: BACnetDevice):
         """Publish device status/availability"""
@@ -323,40 +323,40 @@ class MQTTPublishingService:
         self.publisher.disconnect()
         logger.info("MQTT publishing service stopped")
     
-async def _publish_loop(self):
-    """Main publishing loop"""
-    while self.running:
-        try:
-            if not self.publisher.connected:
-                logger.warning("MQTT not connected, waiting...")
+    async def _publish_loop(self):
+        """Main publishing loop"""
+        while self.running:
+            try:
+                if not self.publisher.connected:
+                    logger.warning("MQTT not connected, waiting...")
+                    await asyncio.sleep(5)
+                    continue
+                
+                devices = self.device_registry.get_enabled_devices()
+                
+                total_published = 0
+                for device in devices:
+                    try:
+                        # Publish device status (only if enabled for this device)
+                        if device.mqtt_status_enabled:
+                            self.publisher.publish_device_status(device)
+                        
+                        # Publish all device data (properties with or without mappings)
+                        count = self.publisher.publish_device(device)
+                        total_published += count
+                        
+                    except Exception as e:
+                        logger.error(
+                            f"Error publishing device {device.device_id}: {e}"
+                        )
+                
+                if total_published > 0:
+                    logger.debug(f"Published {total_published} properties to MQTT")
+                
+                await asyncio.sleep(self.publish_interval)
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in publishing loop: {e}")
                 await asyncio.sleep(5)
-                continue
-            
-            devices = self.device_registry.get_enabled_devices()
-            
-            total_published = 0
-            for device in devices:
-                try:
-                    # Publish device status (only if enabled for this device)
-                    if device.mqtt_status_enabled:
-                        self.publisher.publish_device_status(device)
-                    
-                    # Publish all device data (properties with or without mappings)
-                    count = self.publisher.publish_device(device)
-                    total_published += count
-                    
-                except Exception as e:
-                    logger.error(
-                        f"Error publishing device {device.device_id}: {e}"
-                    )
-            
-            if total_published > 0:
-                logger.debug(f"Published {total_published} properties to MQTT")
-            
-            await asyncio.sleep(self.publish_interval)
-            
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"Error in publishing loop: {e}")
-            await asyncio.sleep(5)
