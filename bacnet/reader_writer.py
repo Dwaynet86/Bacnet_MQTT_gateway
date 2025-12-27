@@ -191,6 +191,14 @@ class BACnetReaderWriter:
     ) -> dict:
         """
         Poll an object for specified properties and update the device model
+        
+        Args:
+            device: BACnet device
+            obj: BACnet object to poll
+            properties: List of property identifiers to read
+            
+        Returns:
+            Dictionary of property values
         """
         results = {}
         
@@ -215,7 +223,7 @@ class BACnetReaderWriter:
                     prop_id
                 )
                 
-                logger.debug(f"  Got value: {value}")
+                logger.debug(f"  Read returned: {value} (type: {type(value).__name__ if value is not None else 'None'})")
                 
                 if value is not None:
                     # Try to get engineering units if reading present-value
@@ -230,20 +238,31 @@ class BACnetReaderWriter:
                             )
                             if unit_value:
                                 unit = str(unit_value)
+                                logger.debug(f"  Got units: {unit}")
                         except Exception as e:
                             error_msg = str(e).lower()
                             if 'unknown-property' in error_msg:
                                 obj._unsupported_properties.add('units')
                     
                     # Update object property
-                    logger.info(f"  Updating property {prop_id} on {obj.object_type}:{obj.object_instance} with value: {value}")
+                    logger.info(f"  ✓ Updating {obj.object_type}:{obj.object_instance}.{prop_id} = {value} {unit or ''}")
                     obj.update_property(prop_id, value, unit)
+                    
+                    # Verify it was stored
+                    stored_prop = obj.properties.get(prop_id)
+                    if stored_prop:
+                        logger.debug(f"  ✓ Verified stored: {stored_prop.value}")
+                    else:
+                        logger.error(f"  ✗ Property not stored!")
+                    
                     results[prop_id] = value
                 else:
                     logger.warning(f"  Got None for {prop_id}, marking as unsupported")
                     # If we got None, the property might not be supported
                     obj._unsupported_properties.add(prop_id)
                     
+            except asyncio.TimeoutError:
+                logger.warning(f"  ⏱ Timeout reading {prop_id} from {obj.object_type}:{obj.object_instance}")
             except Exception as e:
                 error_msg = str(e).lower()
                 if 'unknown-property' in error_msg:
@@ -251,9 +270,11 @@ class BACnetReaderWriter:
                     logger.debug(f"  Property {prop_id} not supported (unknown-property error)")
                     obj._unsupported_properties.add(prop_id)
                 else:
-                    logger.warning(f"  Error reading {prop_id}: {e}")
+                    logger.warning(f"  ✗ Error reading {prop_id}: {e}")
         
-        logger.debug(f"Poll complete for {obj.object_type}:{obj.object_instance}, results: {list(results.keys())}")
+        if results:
+            logger.debug(f"✓ Poll complete for {obj.object_type}:{obj.object_instance}, got: {list(results.keys())}")
+        
         return results
     
     async def poll_device_objects(
