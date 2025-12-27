@@ -225,29 +225,46 @@ def publish_property(
         return False
     
     def publish_object(self, device: BACnetDevice, obj: BACnetObject) -> int:
-        """
-        Publish all properties of an object to MQTT
-        
-        Returns:
-            Number of properties published
-        """
-        count = 0
-        for property_id in obj.properties.keys():
-            if self.publish_property(device, obj, property_id):
-                count += 1
-        return count
+    """
+    Publish all properties of an object to MQTT
     
-    def publish_device(self, device: BACnetDevice) -> int:
-        """
-        Publish all objects and properties of a device to MQTT
-        
-        Returns:
-            Number of properties published
-        """
-        count = 0
-        for obj in device.objects.values():
-            count += self.publish_object(device, obj)
-        return count
+    Returns:
+        Number of properties published
+    """
+    count = 0
+    logger.debug(f"Publishing object {obj.object_type}:{obj.object_instance} from device {device.device_id}")
+    logger.debug(f"  Object has {len(obj.properties)} properties: {list(obj.properties.keys())}")
+    
+    for property_id in obj.properties.keys():
+        logger.debug(f"  Attempting to publish property: {property_id}")
+        if self.publish_property(device, obj, property_id):
+            count += 1
+            logger.debug(f"    ✓ Published {property_id}")
+        else:
+            logger.debug(f"    ✗ Failed to publish {property_id}")
+    
+    logger.debug(f"  Published {count}/{len(obj.properties)} properties")
+    return count
+
+def publish_device(self, device: BACnetDevice) -> int:
+    """
+    Publish all objects and properties of a device to MQTT
+    
+    Returns:
+        Number of properties published
+    """
+    count = 0
+    logger.debug(f"Publishing device {device.device_id} with {len(device.objects)} objects")
+    
+    for obj_key, obj in device.objects.items():
+        logger.debug(f"  Processing object: {obj_key}")
+        obj_count = self.publish_object(device, obj)
+        count += obj_count
+        if obj_count > 0:
+            logger.debug(f"    ✓ Published {obj_count} properties from {obj_key}")
+    
+    logger.info(f"Published {count} total properties from device {device.device_id}")
+    return count
     
     def publish_device_status(self, device: BACnetDevice):
         """Publish device status/availability"""
