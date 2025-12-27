@@ -218,11 +218,11 @@ class BACnetReaderWriter:
         for prop_id in properties:
             # Skip properties we know this object doesn't support
             if prop_id in obj._unsupported_properties:
-                logger.debug(f"  Skipping {prop_id} (marked as unsupported)")
+                # logger.debug(f"  Skipping {prop_id} (marked as unsupported)")
                 continue
                 
             try:
-                logger.debug(f"  Reading {prop_id}...")
+                # logger.debug(f"  Reading {prop_id}...")
                 value = await self.read_property(
                     device.device_id,
                     obj.object_type,
@@ -239,7 +239,7 @@ class BACnetReaderWriter:
                         obj.object_type in UNITS_SUPPORTED_TYPES and 
                         'units' not in obj._unsupported_properties):
                         try:
-                            logger.debug(f"  Reading units...")
+                            # logger.debug(f"  Reading units...")
                             unit_value = await self.read_property(
                                 device.device_id,
                                 obj.object_type,
@@ -248,27 +248,23 @@ class BACnetReaderWriter:
                             )
                             if unit_value:
                                 unit = str(unit_value)
-                                logger.debug(f"  Got units: {unit}")
+                               # logger.debug(f"  Got units: {unit}")
                         except Exception as e:
                             error_msg = str(e).lower()
                             if 'unknown-property' in error_msg:
                                 obj._unsupported_properties.add('units')
-                                logger.debug(f"  Units not supported")
+                                #logger.debug(f"  Units not supported")
                     
                     # Update object property
-                    logger.info(f"  ✓ Updating {obj.object_type}:{obj.object_instance}.{prop_id} = {value} {unit or ''}")
+                    #logger.info(f"  ✓ Updating {obj.object_type}:{obj.object_instance}.{prop_id} = {value} {unit or ''}")
                     obj.update_property(prop_id, value, unit)
                     
                     # Verify it was stored
                     stored_prop = obj.properties.get(prop_id)
-                    if stored_prop:
-                        logger.debug(f"  ✓ Verified stored: {stored_prop.value}")
-                    else:
-                        logger.error(f"  ✗ Property not stored!")
                     
                     results[prop_id] = value
                 else:
-                    logger.warning(f"  Got None for {prop_id}, marking as unsupported")
+                    #logger.warning(f"  Got None for {prop_id}, marking as unsupported")
                     # If we got None, the property might not be supported
                     obj._unsupported_properties.add(prop_id)
                     
@@ -278,13 +274,13 @@ class BACnetReaderWriter:
                 error_msg = str(e).lower()
                 if 'unknown-property' in error_msg:
                     # Mark this property as unsupported to avoid future attempts
-                    logger.debug(f"  Property {prop_id} not supported (unknown-property error)")
+                    #logger.debug(f"  Property {prop_id} not supported (unknown-property error)")
                     obj._unsupported_properties.add(prop_id)
                 else:
                     logger.warning(f"  ✗ Error reading {prop_id}: {e}")
         
         if results:
-            logger.debug(f"✓ Poll complete for {obj.object_type}:{obj.object_instance}, got: {list(results.keys())}")
+           # logger.debug(f"✓ Poll complete for {obj.object_type}:{obj.object_instance}, got: {list(results.keys())}")
         
         return results
     
