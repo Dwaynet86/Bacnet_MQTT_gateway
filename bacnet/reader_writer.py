@@ -225,7 +225,7 @@ class BACnetReaderWriter:
                     prop_id
                 )
                 
-                logger.debug(f"  Read returned: {value} (type: {type(value).__name__ if value is not None else 'None'})")
+                #logger.debug(f"  Read returned: {value} (type: {type(value).__name__ if value is not None else 'None'})")
                 
                 if value is not None:
                     # Try to get engineering units ONLY for analog types reading present-value
@@ -259,7 +259,7 @@ class BACnetReaderWriter:
                     
                     results[prop_id] = value
                 else:
-                    #logger.warning(f"  Got None for {prop_id}, marking as unsupported")
+                    logger.warning(f"  Got None for {prop_id}, marking as unsupported")
                     # If we got None, the property might not be supported
                     obj._unsupported_properties.add(prop_id)
                     
@@ -291,10 +291,10 @@ class BACnetReaderWriter:
             device: BACnet device
             properties: List of property identifiers to read
         """
-        logger.info(f"Starting poll for device {device.device_id}")
-        logger.info(f"  Device enabled: {device.enabled}")
-        logger.info(f"  Object count: {len(device.objects)}")
-        logger.info(f"  Properties to read: {properties}")
+        #logger.info(f"Starting poll for device {device.device_id}")
+        #logger.info(f"  Device enabled: {device.enabled}")
+        #logger.info(f"  Object count: {len(device.objects)}")
+        #logger.info(f"  Properties to read: {properties}")
         
         if len(device.objects) == 0:
             logger.warning(f"Device {device.device_id} has no objects to poll!")
