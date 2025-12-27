@@ -295,6 +295,31 @@ class APIController:
                         detail="Failed to read property"
                     )
                 
+                # **ADD THIS SECTION** - Update the device registry with the value
+                device = self.device_registry.get_device(request.device_id)
+                if device:
+                    obj = device.get_object(request.object_type, request.object_instance)
+                    if obj:
+                        # Try to get units if reading present-value
+                        unit = None
+                        if request.property_id == 'present-value':
+                            try:
+                                unit_value = await self.reader_writer.read_property(
+                                    request.device_id,
+                                    request.object_type,
+                                    request.object_instance,
+                                    'units'
+                                )
+                                if unit_value:
+                                    unit = str(unit_value)
+                            except:
+                                pass
+                        
+                        # Update the object property
+                        obj.update_property(request.property_id, value, unit)
+                        # Save the registry
+                        self.device_registry.save()
+                
                 return {
                     "device_id": request.device_id,
                     "object_type": request.object_type,
